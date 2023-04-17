@@ -38,7 +38,7 @@ IndexHash::release_latch(BucketHeader * bucket) {
 }
 
 	
-RC IndexHash::index_insert(idx_key_t key, itemid_t * item, int part_id) {
+RC IndexHash::index_insert(idx_key_t key, void * item, int part_id) {
 	RC rc = RCOK;
 	uint64_t bkt_idx = hash(key);
 	assert(bkt_idx < _bucket_cnt_per_part);
@@ -54,7 +54,7 @@ RC IndexHash::index_insert(idx_key_t key, itemid_t * item, int part_id) {
 	return rc;
 }
 
-RC IndexHash::index_read(idx_key_t key, itemid_t * &item, int part_id) {
+RC IndexHash::index_read(idx_key_t key, void * &item, int part_id) {
 	uint64_t bkt_idx = hash(key);
 	assert(bkt_idx < _bucket_cnt_per_part);
 	BucketHeader * cur_bkt = &_buckets[part_id][bkt_idx];
@@ -68,7 +68,7 @@ RC IndexHash::index_read(idx_key_t key, itemid_t * &item, int part_id) {
 
 }
 
-RC IndexHash::index_read(idx_key_t key, itemid_t * &item, 
+RC IndexHash::index_read(idx_key_t key, void * &item,
 						int part_id, int thd_id) {
 	uint64_t bkt_idx = hash(key);
 	assert(bkt_idx < _bucket_cnt_per_part);
@@ -81,7 +81,10 @@ RC IndexHash::index_read(idx_key_t key, itemid_t * &item,
 //	release_latch(cur_bkt);
 	return rc;
 }
-
+int IndexHash::index_scan(idx_key_t key, int range,
+                            uint64_t part_id, void** output) {
+    return 0;
+}
 /************** BucketHeader Operations ******************/
 
 void BucketHeader::init() {
@@ -90,9 +93,7 @@ void BucketHeader::init() {
 	locked = false;
 }
 
-void BucketHeader::insert_item(idx_key_t key, 
-		itemid_t * item, 
-		int part_id) 
+void BucketHeader::insert_item(idx_key_t key, void *item, int part_id)
 {
 	BucketNode * cur_node = first_node;
 	BucketNode * prev_node = NULL;
@@ -115,12 +116,16 @@ void BucketHeader::insert_item(idx_key_t key,
 			first_node = new_node;
 		}
 	} else {
-		item->next = cur_node->items;
+#if  ENGINE_TYPE == DBX1000
+        ((itemid_t *)item)->next = (itemid_t *)cur_node->items;
+#elif ENGINE_TYPE == SILO
+        ((row_t *)item)->next = (row_t *)cur_node->items;
+#endif
 		cur_node->items = item;
 	}
 }
 
-void BucketHeader::read_item(idx_key_t key, itemid_t * &item, const char * tname) 
+void BucketHeader::read_item(idx_key_t key, void * &item, const char * tname)
 {
 	BucketNode * cur_node = first_node;
 	while (cur_node != NULL) {

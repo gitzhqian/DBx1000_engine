@@ -1,6 +1,7 @@
 #pragma once 
 
 #include "global.h"
+#include "row.h"
 
 // TODO sequential scan is not supported yet.
 // only index access is supported for table. 

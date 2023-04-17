@@ -21,7 +21,7 @@ RC TestTxnMan::testReadwrite(int access_num) {
 	RC rc = RCOK;
 	itemid_t * m_item;
 
-	m_item = index_read(_wl->the_index, 0, 0);
+	m_item = (itemid_t *)index_read(_wl->the_index, 0, 0);
 	row_t * row = ((row_t *)m_item->location);
 	row_t * row_local = get_row(row, WR);
 	if (access_num == 0) {			
@@ -61,7 +61,7 @@ TestTxnMan::testConflict(int access_num)
 
 	idx_key_t key;
 	for (key = 0; key < 1; key ++) {
-		m_item = index_read(_wl->the_index, key, 0);
+		m_item = (itemid_t *)index_read(_wl->the_index, key, 0);
 		row_t * row = ((row_t *)m_item->location);
 		row_t * row_local; 
 		row_local = get_row(row, WR);

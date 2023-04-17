@@ -138,7 +138,8 @@ row_t * txn_man::get_row(row_t * row, access_t type) {
 #endif
 		num_accesses_alloc ++;
 	}
-	
+
+
 	rc = row->get_row(type, this, accesses[ row_cnt ]->data);
 
 
@@ -184,17 +185,17 @@ void txn_man::insert_row(row_t * row, table_t * table) {
 	insert_rows[insert_cnt ++] = row;
 }
 
-itemid_t *
+void *
 txn_man::index_read(INDEX * index, idx_key_t key, int part_id) {
 	uint64_t starttime = get_sys_clock();
-	itemid_t * item;
+	void * item;
 	index->index_read(key, item, part_id, get_thd_id());
 	INC_TMP_STATS(get_thd_id(), time_index, get_sys_clock() - starttime);
 	return item;
 }
 
 void 
-txn_man::index_read(INDEX * index, idx_key_t key, int part_id, itemid_t *& item) {
+txn_man::index_read(INDEX * index, idx_key_t key, int part_id, void *& item) {
 	uint64_t starttime = get_sys_clock();
 	index->index_read(key, item, part_id, get_thd_id());
 	INC_TMP_STATS(get_thd_id(), time_index, get_sys_clock() - starttime);

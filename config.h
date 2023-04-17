@@ -1,17 +1,21 @@
 #ifndef _CONFIG_H_
 #define _CONFIG_H_
 
+
 /***********************************************/
 // Simulation + Hardware
 /***********************************************/
-#define THREAD_CNT					4
-#define PART_CNT					1 
-// each transaction only accesses 1 virtual partition. But the lock/ts manager and index are not aware of such partitioning. VIRTUAL_PART_CNT describes the request distribution and is only used to generate queries. For HSTORE, VIRTUAL_PART_CNT should be the same as PART_CNT.
+#define THREAD_CNT					8
+#define PART_CNT					1
+// each transaction only accesses 1 virtual partition.
+//But the lock/ts manager and index are not aware of such partitioning.
+//VIRTUAL_PART_CNT describes the request distribution and is only used to generate queries.
+//For HSTORE, VIRTUAL_PART_CNT should be the same as PART_CNT.
 #define VIRTUAL_PART_CNT			1
 #define PAGE_SIZE					4096 
 #define CL_SIZE						64
 // CPU_FREQ is used to get accurate timing info 
-#define CPU_FREQ 					2 	// in GHz/s
+#define CPU_FREQ 					2.4 	// in GHz/s
 
 // # of transactions to run for warmup
 #define WARMUP						0
@@ -20,7 +24,9 @@
 // print the transaction latency distribution
 #define PRT_LAT_DISTR				false
 #define STATS_ENABLE				true
-#define TIME_ENABLE					true 
+#define TIME_ENABLE					true
+
+#define CACHE_LINE_SIZE             64
 
 #define MEM_ALLIGN					8 
 
@@ -39,11 +45,11 @@
 /***********************************************/
 // WAIT_DIE, NO_WAIT, DL_DETECT, TIMESTAMP, MVCC, HEKATON, HSTORE, OCC, VLL, TICTOC, SILO
 // TODO TIMESTAMP does not work at this moment
-#define CC_ALG 						TICTOC
+#define CC_ALG 						SILO
 #define ISOLATION_LEVEL 			SERIALIZABLE
 
 // all transactions acquire tuples according to the primary key order.
-#define KEY_ORDER					false
+#define KEY_ORDER					true
 // transaction roll back changes after abort
 #define ROLL_BACK					true
 // per-row lock/ts management or central lock/ts management
@@ -51,13 +57,14 @@
 #define BUCKET_CNT					31
 #define ABORT_PENALTY 				100000
 #define ABORT_BUFFER_SIZE			10
-#define ABORT_BUFFER_ENABLE			true
+#define ABORT_BUFFER_ENABLE			false
 // [ INDEX ]
-#define ENABLE_LATCH				false
-#define CENTRAL_INDEX				false
+#define ENABLE_LATCH				true
+#define CENTRAL_INDEX				true
 #define CENTRAL_MANAGER 			false
-#define INDEX_STRUCT				IDX_HASH
-#define BTREE_ORDER 				16
+//#define INDEX_STRUCT				IDX_HASH
+#define INDEX_STRUCT				IDX_BTREE
+#define BTREE_ORDER 				64
 
 // [DL_DETECT] 
 #define DL_LOOP_DETECT				1000 	// 100 us
@@ -101,7 +108,7 @@
 /***********************************************/
 #define LOG_COMMAND					false
 #define LOG_REDO					false
-#define LOG_BATCH_TIME				10 // in ms
+#define LOG_BATCH_TIME				10000 // in ms
 
 /***********************************************/
 // Benchmark
@@ -113,16 +120,17 @@
 #define FIRST_PART_LOCAL 			true
 #define MAX_TUPLE_SIZE				1024 // in bytes
 // ==== [YCSB] ====
-#define INIT_PARALLELISM			40
-#define SYNTH_TABLE_SIZE 			(1024 * 1024 * 10)
-#define ZIPF_THETA 					0.6
-#define READ_PERC 					0.9
-#define WRITE_PERC 					0.1
+#define INIT_PARALLELISM			1
+//#define SYNTH_TABLE_SIZE 			(1024 * 1024 * 10)
+#define SYNTH_TABLE_SIZE 			(1024 * 100)
+#define ZIPF_THETA 					0.0
+#define READ_PERC 					0.5
+#define WRITE_PERC 					0.5
 #define SCAN_PERC 					0
 #define SCAN_LEN					20
 #define PART_PER_TXN 				1
 #define PERC_MULTI_PART				1
-#define REQ_PER_QUERY				16
+#define REQ_PER_QUERY				6
 #define FIELD_PER_TUPLE				10
 // ==== [TPCC] ====
 // For large warehouse count, the tables do not fit in memory
@@ -214,5 +222,13 @@ extern TestCases					g_test_case;
 #define TS_CAS						2
 #define TS_HW						3
 #define TS_CLOCK					4
+
+//database engine
+// dbx1000, stage, silo
+//#define ENGINE_TYPE                 DBX1000
+//#define ENGINE_TYPE                 STAGE
+#define ENGINE_TYPE                 SILO
+
+
 
 #endif

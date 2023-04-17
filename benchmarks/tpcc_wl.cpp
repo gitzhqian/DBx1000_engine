@@ -2,7 +2,6 @@
 #include "helper.h"
 #include "tpcc.h"
 #include "wl.h"
-#include "thread.h"
 #include "table.h"
 #include "index_hash.h"
 #include "index_btree.h"

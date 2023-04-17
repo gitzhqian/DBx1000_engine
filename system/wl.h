@@ -1,7 +1,7 @@
 #pragma once 
 
 #include "global.h"
-
+#include "thread.h"
 class row_t;
 class table_t;
 class IndexHash;

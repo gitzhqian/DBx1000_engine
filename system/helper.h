@@ -151,6 +151,7 @@ public:
 	void * location; // points to the table | page | row
 	itemid_t * next;
 	bool valid;
+
 	void init();
 	bool operator==(const itemid_t &other) const;
 	bool operator!=(const itemid_t &other) const;

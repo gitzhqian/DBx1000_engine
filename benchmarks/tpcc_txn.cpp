@@ -3,7 +3,6 @@
 #include "tpcc_helper.h"
 #include "query.h"
 #include "wl.h"
-#include "thread.h"
 #include "table.h"
 #include "row.h"
 #include "index_hash.h"
@@ -55,7 +54,7 @@ RC tpcc_txn_man::run_payment(tpcc_query * query) {
 	// the variable.
 	key = query->w_id;
 	INDEX * index = _wl->i_warehouse; 
-	item = index_read(index, key, wh_to_part(w_id));
+	item = (itemid_t *)index_read(index, key, wh_to_part(w_id));
 	assert(item != NULL);
 	row_t * r_wh = ((row_t *)item->location);
 	row_t * r_wh_local;
@@ -82,7 +81,7 @@ RC tpcc_txn_man::run_payment(tpcc_query * query) {
 		WHERE d_w_id=:w_id AND d_id=:d_id;
 	+=====================================================*/
 	key = distKey(query->d_id, query->d_w_id);
-	item = index_read(_wl->i_district, key, wh_to_part(w_id));
+	item = (itemid_t *)index_read(_wl->i_district, key, wh_to_part(w_id));
 	assert(item != NULL);
 	row_t * r_dist = ((row_t *)item->location);
 	row_t * r_dist_local = get_row(r_dist, WR);
@@ -126,7 +125,7 @@ RC tpcc_txn_man::run_payment(tpcc_query * query) {
 		// XXX: the list is not sorted. But let's assume it's sorted... 
 		// The performance won't be much different.
 		INDEX * index = _wl->i_customer_last;
-		item = index_read(index, key, wh_to_part(c_w_id));
+		item = (itemid_t *)index_read(index, key, wh_to_part(c_w_id));
 		assert(item != NULL);
 		
 		int cnt = 0;
@@ -164,7 +163,7 @@ RC tpcc_txn_man::run_payment(tpcc_query * query) {
 		+======================================================================*/
 		key = custKey(query->c_id, query->c_d_id, query->c_w_id);
 		INDEX * index = _wl->i_customer_id;
-		item = index_read(index, key, wh_to_part(c_w_id));
+		item = (itemid_t *)index_read(index, key, wh_to_part(c_w_id));
 		assert(item != NULL);
 		r_cust = (row_t *) item->location;
 	}
@@ -258,7 +257,7 @@ RC tpcc_txn_man::run_new_order(tpcc_query * query) {
 	+========================================================================*/
 	key = w_id;
 	index = _wl->i_warehouse; 
-	item = index_read(index, key, wh_to_part(w_id));
+	item = (itemid_t *)index_read(index, key, wh_to_part(w_id));
 	assert(item != NULL);
 	row_t * r_wh = ((row_t *)item->location);
 	row_t * r_wh_local = get_row(r_wh, RD);
@@ -271,7 +270,7 @@ RC tpcc_txn_man::run_new_order(tpcc_query * query) {
 	r_wh_local->get_value(W_TAX, w_tax); 
 	key = custKey(c_id, d_id, w_id);
 	index = _wl->i_customer_id;
-	item = index_read(index, key, wh_to_part(w_id));
+	item = (itemid_t *)index_read(index, key, wh_to_part(w_id));
 	assert(item != NULL);
 	row_t * r_cust = (row_t *) item->location;
 	row_t * r_cust_local = get_row(r_cust, RD);
@@ -293,7 +292,7 @@ RC tpcc_txn_man::run_new_order(tpcc_query * query) {
 		WH ERE d _id = :d_id AN D d _w _id = :w _id ;
 	+===================================================*/
 	key = distKey(d_id, w_id);
-	item = index_read(_wl->i_district, key, wh_to_part(w_id));
+	item = (itemid_t *)index_read(_wl->i_district, key, wh_to_part(w_id));
 	assert(item != NULL);
 	row_t * r_dist = ((row_t *)item->location);
 	row_t * r_dist_local = get_row(r_dist, WR);
@@ -345,7 +344,7 @@ RC tpcc_txn_man::run_new_order(tpcc_query * query) {
 			WHERE i_id = :ol_i_id;
 		+===========================================*/
 		key = ol_i_id;
-		item = index_read(_wl->i_item, key, 0);
+		item = (itemid_t *)index_read(_wl->i_item, key, 0);
 		assert(item != NULL);
 		row_t * r_item = ((row_t *)item->location);
 
@@ -376,10 +375,10 @@ RC tpcc_txn_man::run_new_order(tpcc_query * query) {
 
 		uint64_t stock_key = stockKey(ol_i_id, ol_supply_w_id);
 		INDEX * stock_index = _wl->i_stock;
-		itemid_t * stock_item;
-		index_read(stock_index, stock_key, wh_to_part(ol_supply_w_id), stock_item);
+		void * stock_item;
+        index_read(stock_index, stock_key, wh_to_part(ol_supply_w_id), stock_item);
 		assert(item != NULL);
-		row_t * r_stock = ((row_t *)stock_item->location);
+		row_t * r_stock = ((row_t *)((itemid_t *)stock_item)->location);
 		row_t * r_stock_local = get_row(r_stock, WR);
 		if (r_stock_local == NULL) {
 			return finish(Abort);

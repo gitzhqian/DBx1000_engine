@@ -102,6 +102,8 @@ public:
   #endif
 	char * data;
 	table_t * table;
+	row_t *next;
+    bool valid;
 private:
 	// primary key should be calculated from the data stored in the row.
 	uint64_t 		_primary_key;

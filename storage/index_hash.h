@@ -18,15 +18,15 @@ public:
 	// The node for the next key	
 	BucketNode * 	next;	
 	// NOTE. The items can be a list of items connected by the next pointer. 
-	itemid_t * 		items;
+    void * 		items;
 };
 
 // BucketHeader does concurrency control of Hash
 class BucketHeader {
 public:
 	void init();
-	void insert_item(idx_key_t key, itemid_t * item, int part_id);
-	void read_item(idx_key_t key, itemid_t * &item, const char * tname);
+	void insert_item(idx_key_t key, void * item, int part_id);
+	void read_item(idx_key_t key, void * &item, const char * tname);
 	BucketNode * 	first_node;
 	uint64_t 		node_cnt;
 	bool 			locked;
@@ -41,11 +41,13 @@ public:
 					table_t * table, 
 					uint64_t bucket_cnt);
 	bool 		index_exist(idx_key_t key); // check if the key exist.
-	RC 			index_insert(idx_key_t key, itemid_t * item, int part_id=-1);
+	RC 			index_insert(idx_key_t key, void * item, int part_id=-1);
 	// the following call returns a single item
-	RC	 		index_read(idx_key_t key, itemid_t * &item, int part_id=-1);	
-	RC	 		index_read(idx_key_t key, itemid_t * &item,
+	RC	 		index_read(idx_key_t key, void * &item, int part_id=-1);
+	RC	 		index_read(idx_key_t key, void * &item,
 							int part_id=-1, int thd_id=0);
+    int         index_scan(idx_key_t key, int range, uint64_t part_id, void** output);
+
 private:
 	void get_latch(BucketHeader * bucket);
 	void release_latch(BucketHeader * bucket);

@@ -23,12 +23,17 @@ row_t::init(table_t * host_table, uint64_t part_id, uint64_t row_id) {
 	Catalog * schema = host_table->get_schema();
 	int tuple_size = schema->get_tuple_size();
 	data = (char *) _mm_malloc(sizeof(char) * tuple_size, 64);
+
+    valid = false;
+    next = NULL;
 	return RCOK;
 }
 void 
 row_t::init(int size) 
 {
 	data = (char *) _mm_malloc(size, 64);
+    valid = false;
+    next = NULL;
 }
 
 RC 
@@ -249,7 +254,7 @@ RC row_t::get_row(access_t type, txn_man * txn, row_t *& row) {
 #elif CC_ALG == TICTOC || CC_ALG == SILO
 	// like OCC, tictoc also makes a local copy for each read/write
 	row->table = get_table();
-	TsType ts_type = (type == RD)? R_REQ : P_REQ; 
+	TsType ts_type = (type == RD)? R_REQ : P_REQ;
 	rc = this->manager->access(txn, ts_type, row);
 	return rc;
 #elif CC_ALG == HSTORE || CC_ALG == VLL

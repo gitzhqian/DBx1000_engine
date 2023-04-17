@@ -29,12 +29,14 @@ public:
 	RC			init(uint64_t part_cnt);
 	RC			init(uint64_t part_cnt, table_t * table);
 	bool 		index_exist(idx_key_t key); // check if the key exist. 
-	RC 			index_insert(idx_key_t key, itemid_t * item, int part_id = -1);
-	RC	 		index_read(idx_key_t key, itemid_t * &item, 
-					uint64_t thd_id, int64_t part_id = -1);
-	RC	 		index_read(idx_key_t key, itemid_t * &item, int part_id = -1);
-	RC	 		index_read(idx_key_t key, itemid_t * &item);
-	RC 			index_next(uint64_t thd_id, itemid_t * &item, bool samekey = false);
+	RC 			index_insert(idx_key_t key, void * item, int part_id = -1);
+	RC	 		index_read(idx_key_t key, void * &item,
+                             int part_id=-1, int thd_id=0);
+	RC	 		index_read(idx_key_t key, void * &item, int part_id = -1);
+	RC	 		index_read(idx_key_t key, void * &item);
+	RC 			index_next(uint64_t thd_id, void * &item, bool samekey = false);
+    int         index_scan(idx_key_t key, int range, uint64_t part_id, void** output);
+
 
 private:
 	// index structures may have part_cnt = 1 or PART_CNT.
@@ -43,15 +45,17 @@ private:
 	RC			make_nl(uint64_t part_id, bt_node *& node);
 	RC		 	make_node(uint64_t part_id, bt_node *& node);
 	
-	RC 			start_new_tree(glob_param params, idx_key_t key, itemid_t * item);
+	RC 			start_new_tree(glob_param params, idx_key_t key, void * item);
 	RC 			find_leaf(glob_param params, idx_key_t key, idx_acc_t access_type, bt_node *& leaf, bt_node  *& last_ex);
 	RC 			find_leaf(glob_param params, idx_key_t key, idx_acc_t access_type, bt_node *& leaf);
-	RC			insert_into_leaf(glob_param params, bt_node * leaf, idx_key_t key, itemid_t * item);
+	RC			insert_into_leaf(glob_param params, bt_node * leaf, idx_key_t key, void * item);
 	// handle split
-	RC 			split_lf_insert(glob_param params, bt_node * leaf, idx_key_t key, itemid_t * item);
+	RC 			split_lf_insert(glob_param params, bt_node * leaf, idx_key_t key, void * item);
 	RC 			split_nl_insert(glob_param params, bt_node * node, UInt32 left_index, idx_key_t key, bt_node * right);
 	RC 			insert_into_parent(glob_param params, bt_node * left, idx_key_t key, bt_node * right);
 	RC 			insert_into_new_root(glob_param params, bt_node * left, idx_key_t key, bt_node * right);
+
+    uint32_t    lowerBound(idx_key_t k) ;
 
 	int			leaf_has_key(bt_node * leaf, idx_key_t key);
 	
@@ -65,10 +69,17 @@ private:
 	RC		 	upgrade_latch(bt_node * node);
 	// clean up all the LATCH_EX up tp last_ex
 	RC 			cleanup(bt_node * node, bt_node * last_ex);
+    void yield(int count) {
+        if (count>3)
+            sched_yield();
+        else
+            PAUSE;
+    }
 
-	// the leaf and the idx within the leaf that the thread last accessed.
+
+    // the leaf and the idx within the leaf that the thread last accessed.
 	bt_node *** cur_leaf_per_thd;
-	UInt32 ** 		cur_idx_per_thd;
+	UInt32 ** 	cur_idx_per_thd;
 };
 
 #endif
