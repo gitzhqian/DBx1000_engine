@@ -7,6 +7,7 @@
 #include "row.h"
 #include "index_hash.h"
 #include "index_btree.h"
+#include "btree_store.h"
 #include "catalog.h"
 #include "manager.h"
 #include "row_lock.h"
@@ -51,12 +52,14 @@ RC ycsb_wl::init_table() {
             if (total_row > g_synth_table_size)
                 goto ins_done;
             row_t * new_row = NULL;
+            uint64_t primary_key = total_row;
+
+#if  ENGINE_TYPE != PTR0
 			uint64_t row_id;
-            rc = the_table->get_new_row(new_row, part_id, row_id); 
+            rc = the_table->get_new_row(new_row, part_id, row_id);
             // TODO insertion of last row may fail after the table_size
             // is updated. So never access the last record in a table
 			assert(rc == RCOK);
-			uint64_t primary_key = total_row;
 			new_row->set_primary_key(primary_key);
             new_row->set_value(0, &primary_key);
 			Catalog * schema = the_table->get_schema();
@@ -68,6 +71,7 @@ RC ycsb_wl::init_table() {
 				new_row->set_value(fid, value);
 			}
 			//now, just call the malloc
+
             itemid_t * m_item = 
                 (itemid_t *) mem_allocator.alloc( sizeof(itemid_t), part_id );
 			assert(m_item != NULL);
@@ -75,7 +79,21 @@ RC ycsb_wl::init_table() {
             m_item->location = new_row;
             m_item->valid = true;
             uint64_t idx_key = primary_key;
+
+#if  ENGINE_TYPE == PTR1
+            rc = the_index->index_insert(idx_key, new_row, part_id);
+#elif ENGINE_TYPE == PTR2
             rc = the_index->index_insert(idx_key, m_item, part_id);
+#endif
+
+#endif
+
+#if ENGINE_TYPE == PTR0
+            void *row_item;
+            rc = the_index->index_insert(primary_key, row_item, new_row->data );
+            new_row = reinterpret_cast<row_t *>(row_item);
+
+#endif
             assert(rc == RCOK);
             total_row ++;
         }
@@ -103,6 +121,12 @@ void ycsb_wl::init_table_parallel() {
 	}
 	enable_thread_mem_pool = false;
 	mem_allocator.unregister();
+
+
+	the_index->index_store_scan();
+	uint64_t tab_size = the_index->table_size.size();
+	printf("current table size:%lu \n", tab_size);
+
 }
 
 void * ycsb_wl::init_table_slice() {
@@ -118,10 +142,37 @@ void * ycsb_wl::init_table_slice() {
 	assert((UInt32)ATOM_FETCH_ADD(next_tid, 0) == g_init_parallelism);
 	double slice_size = (double)g_synth_table_size / (double)g_init_parallelism;
 	for (uint64_t key = ceil(slice_size * tid);
-			key < min(slice_size * (tid + 1),(double)g_synth_table_size);
-			key ++
-	) {
+			key < min(slice_size * (tid + 1),(double)g_synth_table_size); key ++) {
 		row_t * new_row = NULL;
+
+#if ENGINE_TYPE == PTR0
+        retry_insrt:
+        idx_key_t key_insr = key;
+        auto tuple_size = the_table->schema->tuple_size;
+        char *data = (char *) _mm_malloc(tuple_size, 64);
+        auto fid_size = the_table->get_schema()->get_field_size(0);
+        auto fid_count = the_table->get_schema()->get_field_cnt();
+        for (UInt32 fid = 0; fid < fid_count; fid ++) {
+            char value[fid_size];
+            for (int i = 0; i < fid_size; ++i) {
+                value[i] = 'h';
+            }
+            int pos = fid+fid_size*fid;
+            memcpy( &data[pos], value, fid_size);
+        }
+        void *row_item;
+
+        rc = the_index->index_insert(key_insr, row_item, data);
+
+        if (rc==RCOK){
+            new_row = reinterpret_cast<row_t *>(row_item);
+            auto insrt_lock = ATOM_CAS(new_row->valid, false, true);
+            M_ASSERT(insrt_lock, "insert a row_t, mark txn valid, locking failure.");
+        }
+
+        delete data;
+
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 		uint64_t row_id;
 		int part_id = key_to_part(key);
 		//printf("part_id = %d, key = %lu\n", part_id, key);
@@ -142,27 +193,43 @@ void * ycsb_wl::init_table_slice() {
 
 			new_row->set_value(fid, value);
 		}
-
         uint64_t idx_key = primary_key;
-#if  ENGINE_TYPE == DBX1000
 		itemid_t * m_item =
 			(itemid_t *) mem_allocator.alloc( sizeof(itemid_t), part_id );
 		assert(m_item != NULL);
 		m_item->type = DT_row;
 		m_item->valid = true;
         m_item->location = new_row;
-#endif
 
         retry_insrt:
-#if  ENGINE_TYPE == DBX1000
-		rc = the_index->index_insert(idx_key, m_item, part_id);
-#elif ENGINE_TYPE == SILO
-        rc = the_index->index_insert(idx_key, new_row, part_id);
+            void *row_item;
+    #if ENGINE_TYPE == PTR1
+//            rc = the_index->index_insert(idx_key, new_row, part_id);
+
+	        uint64_t new_row_addr = reinterpret_cast<uint64_t>(new_row);
+	        char *data = reinterpret_cast<char *>(&new_row_addr);
+            rc = the_index->index_insert(idx_key, row_item, data);
+    #elif ENGINE_TYPE == PTR2
+//            rc = the_index->index_insert(idx_key, m_item, part_id);
+
+            uint64_t new_row_addr = reinterpret_cast<uint64_t>(m_item);
+            char *data = reinterpret_cast<char *>(&new_row_addr);
+            rc = the_index->index_insert(idx_key, row_item, data);
+    #endif
+        if (rc==RCOK){
+            new_row = reinterpret_cast<row_t *>(row_item);
+            auto insrt_lock = ATOM_CAS(new_row->valid, false, true);
+            M_ASSERT(insrt_lock, "insert a row_t, mark txn valid, locking failure.");
+        }
+
 #endif
+
 		if (rc!=RCOK){
             goto retry_insrt;
 		}
 //		assert(rc == RCOK);
+
+//        printf("current tuple count = %lu\n",the_table->get_table_size() );
 	}
 	return NULL;
 }

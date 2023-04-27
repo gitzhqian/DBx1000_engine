@@ -89,7 +89,10 @@ void tpcc_wl::init_tab_item() {
 		row_t * row;
 		uint64_t row_id;
 		t_item->get_new_row(row, 0, row_id);
+#if ENGINE_TYPE == PTR0
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 		row->set_primary_key(i);
+#endif
 		row->set_value(I_ID, i);
 		row->set_value(I_IM_ID, URand(1L,10000L, 0));
 		char name[24];
@@ -112,7 +115,10 @@ void tpcc_wl::init_tab_wh(uint32_t wid) {
 	row_t * row;
 	uint64_t row_id;
 	t_warehouse->get_new_row(row, 0, row_id);
+#if ENGINE_TYPE == PTR0
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 	row->set_primary_key(wid);
+#endif
 
 	row->set_value(W_ID, wid);
 	char name[10];
@@ -145,7 +151,10 @@ void tpcc_wl::init_tab_dist(uint64_t wid) {
 		row_t * row;
 		uint64_t row_id;
 		t_district->get_new_row(row, 0, row_id);
+#if ENGINE_TYPE == PTR0
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 		row->set_primary_key(did);
+#endif
 		
 		row->set_value(D_ID, did);
 		row->set_value(D_W_ID, wid);
@@ -181,7 +190,10 @@ void tpcc_wl::init_tab_stock(uint64_t wid) {
 		row_t * row;
 		uint64_t row_id;
 		t_stock->get_new_row(row, 0, row_id);
+#if ENGINE_TYPE == PTR0
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 		row->set_primary_key(sid);
+#endif
 		row->set_value(S_I_ID, sid);
 		row->set_value(S_W_ID, wid);
 		row->set_value(S_QUANTITY, URand(10, 100, wid-1));
@@ -221,7 +233,10 @@ void tpcc_wl::init_tab_cust(uint64_t did, uint64_t wid) {
 		row_t * row;
 		uint64_t row_id;
 		t_customer->get_new_row(row, 0, row_id);
+#if ENGINE_TYPE == PTR0
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 		row->set_primary_key(cid);
+#endif
 
 		row->set_value(C_ID, cid);		
 		row->set_value(C_D_ID, did);
@@ -284,7 +299,10 @@ void tpcc_wl::init_tab_hist(uint64_t c_id, uint64_t d_id, uint64_t w_id) {
 	row_t * row;
 	uint64_t row_id;
 	t_history->get_new_row(row, 0, row_id);
+#if ENGINE_TYPE == PTR0
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 	row->set_primary_key(0);
+#endif
 	row->set_value(H_C_ID, c_id);
 	row->set_value(H_C_D_ID, d_id);
 	row->set_value(H_D_ID, d_id);
@@ -307,7 +325,10 @@ void tpcc_wl::init_tab_order(uint64_t did, uint64_t wid) {
 		row_t * row;
 		uint64_t row_id;
 		t_order->get_new_row(row, 0, row_id);
+#if ENGINE_TYPE == PTR0
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 		row->set_primary_key(oid);
+#endif
 		uint64_t o_ol_cnt = 1;
 		uint64_t cid = perm[oid - 1]; //get_permutation();
 		row->set_value(O_ID, oid);

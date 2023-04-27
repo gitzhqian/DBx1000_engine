@@ -9,6 +9,7 @@
 #include "catalog.h"
 #include "index_btree.h"
 #include "index_hash.h"
+#include "btree_store.h"
 
 void txn_man::init(thread_t * h_thd, workload * h_wl, uint64_t thd_id) {
 	this->h_thd = h_thd;
@@ -119,9 +120,9 @@ void txn_man::cleanup(RC rc) {
 #endif
 }
 
-row_t * txn_man::get_row(row_t * row, access_t type) {
+row_t * txn_man::get_row(void * row_v, access_t type) {
 	if (CC_ALG == HSTORE)
-		return row;
+		return reinterpret_cast<row_t *>(row_v);
 	uint64_t starttime = get_sys_clock();
 	RC rc = RCOK;
 	if (accesses[row_cnt] == NULL) {
@@ -139,15 +140,21 @@ row_t * txn_man::get_row(row_t * row, access_t type) {
 		num_accesses_alloc ++;
 	}
 
-
-	rc = row->get_row(type, this, accesses[ row_cnt ]->data);
-
+    auto row_curr = reinterpret_cast<row_t *>(row_v);
+#if ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
+    rc = row_curr->get_row(type, this, accesses[row_cnt]->data);
+    accesses[row_cnt]->orig_row = row_curr;
+#elif ENGINE_TYPE == PTR0
+    accesses[row_cnt]->orig_row = row_curr;
+    accesses[row_cnt]->data = row_curr;
+    rc = row_curr->get_row(type, this, accesses[ row_cnt ]->data);
+#endif
 
 	if (rc == Abort) {
 		return NULL;
 	}
 	accesses[row_cnt]->type = type;
-	accesses[row_cnt]->orig_row = row;
+
 #if CC_ALG == TICTOC
 	accesses[row_cnt]->wts = last_wts;
 	accesses[row_cnt]->rts = last_rts;
@@ -182,6 +189,7 @@ void txn_man::insert_row(row_t * row, table_t * table) {
 	if (CC_ALG == HSTORE)
 		return;
 	assert(insert_cnt < MAX_ROW_PER_TXN);
+
 	insert_rows[insert_cnt ++] = row;
 }
 
@@ -189,8 +197,13 @@ void *
 txn_man::index_read(INDEX * index, idx_key_t key, int part_id) {
 	uint64_t starttime = get_sys_clock();
 	void * item;
-	index->index_read(key, item, part_id, get_thd_id());
-	INC_TMP_STATS(get_thd_id(), time_index, get_sys_clock() - starttime);
+	auto rc = index->index_read(key, item, part_id, get_thd_id());
+	if (rc != RCOK){
+//        printf("btree read fail, there is no record , txn.cpp,  key: %zu \n", key);
+	    item = NULL;
+	}
+    INC_TMP_STATS(get_thd_id(), time_index, get_sys_clock() - starttime);
+
 	return item;
 }
 
@@ -227,6 +240,37 @@ RC txn_man::finish(RC rc) {
 #else 
 	cleanup(rc);
 #endif
+
+	//insert index
+    for (int rid = 0; rid < insert_cnt; rid ++) {
+        row_t *ins_row = insert_rows[rid];
+        auto index_ = h_wl->indexes["MAIN_INDEX"];
+        char *data = ins_row->data;
+        idx_key_t key = *reinterpret_cast<uint64_t *>(data);
+        void *row_item;
+        row_t * new_row = NULL;
+#if  ENGINE_TYPE == PTR0
+        rc = index_->index_insert(key, row_item, data+sizeof(idx_key_t));
+#elif ENGINE_TYPE == PTR1
+        uint64_t new_row_addr = reinterpret_cast<uint64_t>(ins_row);
+        char *data_ = reinterpret_cast<char *>(&new_row_addr);
+        rc = index_->index_insert(key, row_item, data_);
+#elif ENGINE_TYPE == PTR2
+		itemid_t * m_item =
+			(itemid_t *) mem_allocator.alloc( sizeof(itemid_t), ins_row->get_part_id());
+		assert(m_item != NULL);
+		m_item->type = DT_row;
+		m_item->valid = true;
+        m_item->location = ins_row;
+        uint64_t new_row_addr = reinterpret_cast<uint64_t>(m_item);
+        char *data_ = reinterpret_cast<char *>(&new_row_addr);
+        rc = index_->index_insert(key, row_item, data_);
+#endif
+        new_row = reinterpret_cast<row_t *>(row_item);
+        auto insrt_lock = ATOM_CAS(new_row->valid, false, true);
+        assert(insrt_lock);
+    }
+
 	uint64_t timespan = get_sys_clock() - starttime;
 	INC_TMP_STATS(get_thd_id(), time_man,  timespan);
 	INC_STATS(get_thd_id(), time_cleanup,  timespan);

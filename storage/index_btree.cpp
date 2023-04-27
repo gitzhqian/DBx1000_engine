@@ -109,44 +109,6 @@ RC index_btree::index_read(idx_key_t key, void *& item,
 	return rc;
 }
 
-int index_btree::index_scan(idx_key_t key, int range,
-                            uint64_t part_id, void** output) {
-    glob_param params;
-    assert(part_id != -1);
-    params.part_id = part_id;
-    bt_node * leaf;
-    find_leaf(params, key, INDEX_READ, leaf);
-
-    if (leaf == NULL){
-        M_ASSERT(false, "the leaf does not exist!");
-    }
-
-    uint32_t lower=0;
-    uint32_t upper=order;
-    do {
-        uint32_t mid=((upper-lower)/2)+lower;
-        if (key<leaf->keys[mid]) {
-            upper=mid;
-        } else if (key>leaf->keys[mid]) {
-            lower=mid+1;
-        } else {
-            return mid;
-        }
-    } while (lower<upper);
-
-    int count = 0;
-    uint32_t pos = lower;
-    for (uint32_t i=pos; i<leaf->num_keys; i++) {
-        if (count == range){
-            break;
-        }
-        output[count++] = leaf->pointers[i];
-    }
-    release_latch(leaf);
-
-    return count;
-}
-
 RC index_btree::index_insert(idx_key_t key, void * item, int part_id) {
 	glob_param params;
 	if (WORKLOAD == TPCC) assert(part_id != -1);
@@ -427,10 +389,12 @@ RC index_btree::insert_into_leaf(glob_param params, bt_node * leaf, idx_key_t ke
 	insertion_point = 0;
 	int idx = leaf_has_key(leaf, key);	
 	if (idx >= 0) {
-#if  ENGINE_TYPE == DBX1000
-        ((itemid_t *)item)->next = (itemid_t *)(leaf->pointers[idx]);
-#elif ENGINE_TYPE == SILO
+
+#if  ENGINE_TYPE == PTR0
+#elif ENGINE_TYPE == PTR1
         ((row_t *)item)->next = (row_t *)leaf->pointers[idx];
+#elif ENGINE_TYPE == PTR2
+        ((itemid_t *)item)->next = (itemid_t *)(leaf->pointers[idx]);
 #endif
 		leaf->pointers[idx] = (void *) item;
 		return RCOK;

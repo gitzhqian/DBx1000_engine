@@ -5,7 +5,7 @@
 /***********************************************/
 // Simulation + Hardware
 /***********************************************/
-#define THREAD_CNT					8
+#define THREAD_CNT					4
 #define PART_CNT					1
 // each transaction only accesses 1 virtual partition.
 //But the lock/ts manager and index are not aware of such partitioning.
@@ -45,7 +45,7 @@
 /***********************************************/
 // WAIT_DIE, NO_WAIT, DL_DETECT, TIMESTAMP, MVCC, HEKATON, HSTORE, OCC, VLL, TICTOC, SILO
 // TODO TIMESTAMP does not work at this moment
-#define CC_ALG 						SILO
+#define CC_ALG 						HEKATON
 #define ISOLATION_LEVEL 			SERIALIZABLE
 
 // all transactions acquire tuples according to the primary key order.
@@ -58,12 +58,15 @@
 #define ABORT_PENALTY 				100000
 #define ABORT_BUFFER_SIZE			10
 #define ABORT_BUFFER_ENABLE			false
+
+
+
 // [ INDEX ]
 #define ENABLE_LATCH				true
 #define CENTRAL_INDEX				true
 #define CENTRAL_MANAGER 			false
-//#define INDEX_STRUCT				IDX_HASH
 #define INDEX_STRUCT				IDX_BTREE
+//#define INDEX_STRUCT				IDX_HASH
 #define BTREE_ORDER 				64
 
 // [DL_DETECT] 
@@ -88,12 +91,12 @@
 #define PER_ROW_VALID				true
 // [TICTOC]
 #define WRITE_COPY_FORM				"data" // ptr or data
-#define TICTOC_MV					false
+#define TICTOC_MV					true
 #define WR_VALIDATION_SEPARATE		true
-#define WRITE_PERMISSION_LOCK		false
+#define WRITE_PERMISSION_LOCK		true
 #define ATOMIC_TIMESTAMP			"false"
 // [TICTOC, SILO]
-#define VALIDATION_LOCK				"no-wait" // no-wait or waiting
+#define VALIDATION_LOCK				"waiting" // no-wait or waiting
 #define PRE_ABORT					"true"
 #define ATOMIC_WORD					true
 // [HSTORE]
@@ -114,9 +117,9 @@
 // Benchmark
 /***********************************************/
 // max number of rows touched per transaction
-#define MAX_ROW_PER_TXN				64
+#define MAX_ROW_PER_TXN				1024
 #define QUERY_INTVL 				1UL
-#define MAX_TXN_PER_PART 			100000
+#define MAX_TXN_PER_PART 			(10000*100)
 #define FIRST_PART_LOCAL 			true
 #define MAX_TUPLE_SIZE				1024 // in bytes
 // ==== [YCSB] ====
@@ -124,13 +127,14 @@
 //#define SYNTH_TABLE_SIZE 			(1024 * 1024 * 10)
 #define SYNTH_TABLE_SIZE 			(1024 * 100)
 #define ZIPF_THETA 					0.0
-#define READ_PERC 					0.5
-#define WRITE_PERC 					0.5
-#define SCAN_PERC 					0
-#define SCAN_LEN					20
+#define READ_PERC 					0.0
+#define WRITE_PERC 					0.0
+#define SCAN_PERC 					0.9
+#define INSERT_PERC                 0.1
+#define SCAN_LEN					10
 #define PART_PER_TXN 				1
 #define PERC_MULTI_PART				1
-#define REQ_PER_QUERY				6
+#define REQ_PER_QUERY				100
 #define FIELD_PER_TUPLE				10
 // ==== [TPCC] ====
 // For large warehouse count, the tables do not fit in memory
@@ -197,6 +201,7 @@ extern TestCases					g_test_case;
 // INDEX_STRUCT
 #define IDX_HASH 					1
 #define IDX_BTREE					2
+
 // WORKLOAD
 #define YCSB						1
 #define TPCC						2
@@ -224,11 +229,29 @@ extern TestCases					g_test_case;
 #define TS_CLOCK					4
 
 //database engine
-// dbx1000, stage, silo
-//#define ENGINE_TYPE                 DBX1000
-//#define ENGINE_TYPE                 STAGE
-#define ENGINE_TYPE                 SILO
+#define PTR0                        0
+#define PTR1                        1
+#define PTR2                        2
 
+#define ENGINE_TYPE                 PTR0
+//#define ENGINE_TYPE                 PTR1
+//#define ENGINE_TYPE                 PTR2
+
+#define BUFFER_SEGMENT_SIZE         1024*1024
+#define MERGE_THRESHOLD             32*1024
+
+#define DRAM_BLOCK_SIZE             2*1024
+#define SPLIT_THRESHOLD             1*1024
+#define PAYLOAD_SIZE                100
+
+//#define DRAM_BLOCK_SIZE             2*1024
+//#define SPLIT_THRESHOLD             2*1024
+//#define PAYLOAD_SIZE                8
+
+#define KEY_SIZE                        8
+
+#define DEFAULT_BLOCKS                  256*1024
+#define DURAL_POINTER_ARRAY_MAX_SIZE    16*1024
 
 
 #endif

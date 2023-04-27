@@ -7,7 +7,11 @@
 
 void Row_ts::init(row_t * row) {
 	_row = row;
-	uint64_t part_id = row->get_part_id();
+    uint64_t part_id = 0;
+#if ENGINE_TYPE == PTR0
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
+	part_id = row->get_part_id();
+#endif
 	wts = 0;
 	rts = 0;
 	min_wts = UINT64_MAX;

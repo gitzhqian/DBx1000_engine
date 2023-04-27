@@ -17,16 +17,18 @@ public:
 	// new row.	
 	RC get_new_row(row_t *& row); // this is equivalent to insert()
 	RC get_new_row(row_t *& row, uint64_t part_id, uint64_t &row_id);
+	RC init_row(row_t *& row);
 
 	void delete_row(); // TODO delete_row is not supportet yet
 
-	uint64_t get_table_size() { return cur_tab_size; };
+	uint64_t get_table_size() { return cur_tab_size.load(); };
+    uint64_t get_next_row_id() { return cur_tab_size.fetch_add(1);}
 	Catalog * get_schema() { return schema; };
 	const char * get_table_name() { return table_name; };
 
 	Catalog * 		schema;
 private:
 	const char * 	table_name;
-	uint64_t  		cur_tab_size;
+	std::atomic<uint64_t>  		cur_tab_size;
 	char 			pad[CL_SIZE - sizeof(void *)*3];
 };

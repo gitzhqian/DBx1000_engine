@@ -203,7 +203,8 @@ void Stats::print() {
 		total_debug5  // / BILLION 
 	);
 
-    printf("[summary] throughput(ops/s) =%f\n" , ((total_txn_cnt * 10) / (total_run_time / BILLION))* THREAD_CNT);
+    printf("[summary] throughput(ops/s) =%f\n" ,
+           ((total_txn_cnt * g_req_per_query) / (total_run_time / BILLION))* THREAD_CNT);
 
 	if (g_prt_lat_distr)
 		print_lat_distr();

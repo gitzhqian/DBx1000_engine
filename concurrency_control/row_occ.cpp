@@ -6,7 +6,11 @@
 void 
 Row_occ::init(row_t * row) {
 	_row = row;
-	int part_id = row->get_part_id();
+    int part_id = 0;
+#if ENGINE_TYPE == PTR0
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
+	part_id = row->get_part_id();
+#endif
 	_latch = (pthread_mutex_t *) 
 		mem_allocator.alloc(sizeof(pthread_mutex_t), part_id);
 	pthread_mutex_init( _latch, NULL );

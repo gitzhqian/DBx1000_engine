@@ -81,10 +81,7 @@ RC IndexHash::index_read(idx_key_t key, void * &item,
 //	release_latch(cur_bkt);
 	return rc;
 }
-int IndexHash::index_scan(idx_key_t key, int range,
-                            uint64_t part_id, void** output) {
-    return 0;
-}
+
 /************** BucketHeader Operations ******************/
 
 void BucketHeader::init() {
@@ -116,10 +113,12 @@ void BucketHeader::insert_item(idx_key_t key, void *item, int part_id)
 			first_node = new_node;
 		}
 	} else {
-#if  ENGINE_TYPE == DBX1000
-        ((itemid_t *)item)->next = (itemid_t *)cur_node->items;
-#elif ENGINE_TYPE == SILO
+
+#if ENGINE_TYPE == PTR0
+#elif  ENGINE_TYPE == PTR1
         ((row_t *)item)->next = (row_t *)cur_node->items;
+#elif ENGINE_TYPE == PTR2
+        ((itemid_t *)item)->next = (itemid_t *)cur_node->items;
 #endif
 		cur_node->items = item;
 	}

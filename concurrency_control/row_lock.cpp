@@ -29,7 +29,10 @@ RC Row_lock::lock_get(lock_t type, txn_man * txn) {
 RC Row_lock::lock_get(lock_t type, txn_man * txn, uint64_t* &txnids, int &txncnt) {
 	assert (CC_ALG == DL_DETECT || CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE);
 	RC rc;
+#if ENGINE_TYPE == PTR0
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 	int part_id =_row->get_part_id();
+#endif
 	if (g_central_man)
 		glob_manager->lock_row(_row);
 	else 
@@ -136,7 +139,10 @@ final:
 	if (rc == WAIT && CC_ALG == DL_DETECT) {
 		// Update the waits-for graph
 		ASSERT(waiters_tail->txn == txn);
+#if ENGINE_TYPE == PTR0
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 		txnids = (uint64_t *) mem_allocator.alloc(sizeof(uint64_t) * (owner_cnt + waiter_cnt), part_id);
+#endif
 		txncnt = 0;
 		LockEntry * en = waiters_tail->prev;
 		while (en != NULL) {
@@ -237,8 +243,14 @@ bool Row_lock::conflict_lock(lock_t l1, lock_t l2) {
 }
 
 LockEntry * Row_lock::get_entry() {
-	LockEntry * entry = (LockEntry *) 
+    LockEntry * entry = nullptr;
+
+#if ENGINE_TYPE == PTR0
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
+    entry = (LockEntry *)
 		mem_allocator.alloc(sizeof(LockEntry), _row->get_part_id());
+#endif
+
 	return entry;
 }
 void Row_lock::return_entry(LockEntry * entry) {

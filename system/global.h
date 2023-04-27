@@ -20,6 +20,7 @@
 #include <time.h> 
 #include <sys/time.h>
 #include <math.h>
+#include <limits>
 
 #include "pthread.h"
 #include "config.h"
@@ -96,6 +97,8 @@ extern UInt32 g_part_per_txn;
 extern double g_perc_multi_part;
 extern double g_read_perc;
 extern double g_write_perc;
+extern double g_insert_perc;
+extern double g_scan_perc;
 extern double g_zipf_theta;
 extern UInt64 g_synth_table_size;
 extern UInt32 g_req_per_query;
@@ -110,7 +113,7 @@ extern char * output_file;
 extern UInt32 g_max_items;
 extern UInt32 g_cust_per_dist;
 
-enum RC { RCOK, Commit, Abort, WAIT, ERROR, FINISH};
+enum RC { RCOK, Commit, Abort, WAIT, ERROR, FINISH, Update};
 
 /* Thread */
 typedef uint64_t txnid_t;
@@ -132,24 +135,33 @@ typedef uint64_t idx_key_t; // key id for index
 typedef uint64_t (*func_ptr)(idx_key_t);	// part_id func_ptr(index_key);
 
 /* general concurrency control */
-enum access_t {RD, WR, XP, SCAN};
+enum access_t {RD, WR, XP, SCAN, RO, INS};
 /* LOCK */
 enum lock_t {LOCK_EX, LOCK_SH, LOCK_NONE };
 /* TIMESTAMP */
-enum TsType {R_REQ, W_REQ, P_REQ, XP_REQ}; 
+enum TsType {R_REQ, W_REQ, P_REQ, XP_REQ, O_REQ};
 
 
 #define MSG(str, args...) { \
 	printf("[%s : %d] " str, __FILE__, __LINE__, args); } \
 //	printf(args); }
 
+
+
 // principal index structure. The workload may decide to use a different 
 // index structure for specific purposes. (e.g. non-primary key access should use hash)
-#if (INDEX_STRUCT == IDX_BTREE)
-#define INDEX		index_btree
-#else  // IDX_HASH
-#define INDEX		IndexHash
+#if ENGINE_TYPE == PTR0
+#define INDEX		index_btree_store
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
+    #if (INDEX_STRUCT == IDX_BTREE)
+    //#define INDEX		index_btree
+    #define INDEX		index_btree_store
+    #else
+    #define INDEX		IndexHash  // IDX_HASH
+    #endif
 #endif
+
+
 
 /************************************************/
 // constants

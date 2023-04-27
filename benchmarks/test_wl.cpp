@@ -26,6 +26,9 @@ RC TestWorkload::init_table() {
 	RC rc = RCOK;
 	for (int rid = 0; rid < 10; rid ++) {
 		row_t * new_row = NULL;
+
+#if ENGINE_TYPE == PTR0
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 		uint64_t row_id;
 		int part_id = 0;
         rc = the_table->get_new_row(new_row, part_id, row_id); 
@@ -41,7 +44,9 @@ RC TestWorkload::init_table() {
 		m_item->location = new_row;
 		m_item->valid = true;
 		uint64_t idx_key = primary_key;
-        rc = the_index->index_insert(idx_key, m_item, 0);
+//        rc = the_index->index_insert(idx_key, m_item, 0);
+#endif
+
         assert(rc == RCOK);
     }
 	return rc;

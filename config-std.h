@@ -215,4 +215,21 @@ extern TestCases					g_test_case;
 #define TS_HW						3
 #define TS_CLOCK					4
 
+//database engine
+//#define ENGINE_TYPE                 PTR0
+#define ENGINE_TYPE                 PTR1
+//#define ENGINE_TYPE                 PTR2
+
+#define BUFFER_SEGMENT_SIZE         1024*1024
+#define DRAM_BLOCK_SIZE             64*1024
+
+#define SPLIT_THRESHOLD             16*1024
+#define MERGE_THRESHOLD             32*1024
+#define PAYLOAD_SIZE                1000
+#define KEY_SIZE                    8
+
+#define DEFAULT_BLOCKS              256*1024
+#define DURAL_POINTER_ARRAY_MAX_SIZE  16*1024
+
+
 #endif

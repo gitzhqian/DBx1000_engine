@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "global.h"
 #include "helper.h"
@@ -90,9 +90,9 @@ public:
 	TxnType 		vll_txn_type;
 	void *		index_read(INDEX * index, idx_key_t key, int part_id);
 	void 			index_read(INDEX * index, idx_key_t key, int part_id, void *& item);
-	row_t * 		get_row(row_t * row, access_t type);
+	row_t * 		get_row(void * row, access_t type);
 protected:	
-	void 			insert_row(row_t * row, table_t * table);
+	void 			insert_row(row_t * row, table_t * table );
 private:
 	// insert rows
 	uint64_t 		insert_cnt;

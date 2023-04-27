@@ -35,9 +35,8 @@ public:
 	RC	 		index_read(idx_key_t key, void * &item, int part_id = -1);
 	RC	 		index_read(idx_key_t key, void * &item);
 	RC 			index_next(uint64_t thd_id, void * &item, bool samekey = false);
-    int         index_scan(idx_key_t key, int range, uint64_t part_id, void** output);
-
-
+    int         index_scan(idx_key_t key,  int range, void** output) { return 0;}
+    RC 			index_insert(idx_key_t key, void * &item, char *payload ){ return RCOK;}
 private:
 	// index structures may have part_cnt = 1 or PART_CNT.
 	uint64_t part_cnt;

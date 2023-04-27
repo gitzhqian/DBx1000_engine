@@ -16,29 +16,44 @@
 #include "manager.h"
 
 RC 
-row_t::init(table_t * host_table, uint64_t part_id, uint64_t row_id) {
+row_t::init(table_t * host_table, uint64_t part_id, uint64_t row_id, uint32_t tuple_size) {
+#if ENGINE_TYPE == PTR0
+    data = (char *) _mm_malloc(sizeof(char) * tuple_size, 64);
+    valid = false;
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 	_row_id = row_id;
 	_part_id = part_id;
 	this->table = host_table;
 	Catalog * schema = host_table->get_schema();
-	int tuple_size = schema->get_tuple_size();
-	data = (char *) _mm_malloc(sizeof(char) * tuple_size, 64);
-
+	int tuple_size_ = schema->get_tuple_size();
+    data = (char *) _mm_malloc(sizeof(char) * tuple_size_, 64);
     valid = false;
-    next = NULL;
+
+    next = nullptr;
+#endif
+
 	return RCOK;
 }
 void 
 row_t::init(int size) 
 {
+#if ENGINE_TYPE == PTR0
+    data = (char *) _mm_malloc(size, 64);
+    valid = false;
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 	data = (char *) _mm_malloc(size, 64);
     valid = false;
-    next = NULL;
+    next = nullptr;
+#endif
+
 }
 
 RC 
 row_t::switch_schema(table_t * host_table) {
+#if ENGINE_TYPE == PTR0
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 	this->table = host_table;
+#endif
 	return RCOK;
 }
 
@@ -66,8 +81,11 @@ void row_t::init_manager(row_t * row) {
 #endif
 }
 
-table_t * row_t::get_table() { 
-	return table; 
+table_t * row_t::get_table() {
+#if ENGINE_TYPE == PTR0
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
+	return table;
+#endif
 }
 
 Catalog * row_t::get_schema() { 
@@ -137,7 +155,7 @@ void row_t::free_row() {
 	free(data);
 }
 
-RC row_t::get_row(access_t type, txn_man * txn, row_t *& row) {
+RC row_t::get_row(access_t type, txn_man * txn, row_t *& row){
 	RC rc = RCOK;
 #if CC_ALG == WAIT_DIE || CC_ALG == NO_WAIT || CC_ALG == DL_DETECT
 	uint64_t thd_id = txn->get_thd_id();
@@ -227,8 +245,10 @@ RC row_t::get_row(access_t type, txn_man * txn, row_t *& row) {
   #endif
 
 	// TODO need to initialize the table/catalog information.
-	TsType ts_type = (type == RD)? R_REQ : P_REQ; 
+	TsType ts_type = (type == RD || type == SCAN)? R_REQ : P_REQ;
+    ts_type = (type == RO)? O_REQ : ts_type;
 	rc = this->manager->access(txn, ts_type, row);
+
 	if (rc == RCOK ) {
 		row = txn->cur_row;
 	} else if (rc == WAIT) {
@@ -239,10 +259,14 @@ RC row_t::get_row(access_t type, txn_man * txn, row_t *& row) {
 		INC_TMP_STATS(thd_id, time_wait, t2 - t1);
 		row = txn->cur_row;
 	}
+
+#if ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 	if (rc != Abort) {
 		row->table = get_table();
 		assert(row->get_schema() == this->get_schema());
 	}
+#endif
+
 	return rc;
 #elif CC_ALG == OCC
 	// OCC always make a local copy regardless of read or write

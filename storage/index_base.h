@@ -13,7 +13,10 @@ public:
 
 	virtual RC 			index_insert(idx_key_t key, 
 							void * item,
-							int part_id=-1)=0;
+							int part_id=-1 )=0;
+    virtual RC 			index_insert(idx_key_t key,
+                                       void * &item,
+                                       char *payload)=0;
 
 	virtual RC	 		index_read(idx_key_t key,
                              void * &item,
@@ -23,8 +26,8 @@ public:
                              void * &item,
 							int part_id=-1, int thd_id=0)=0;
 	virtual int         index_scan(idx_key_t key,
-                            int range, uint64_t part_id,
-                            void** output)=0;
+                                    int range,
+                                    void** output)=0;
 
 	// TODO implement index_remove
 	virtual RC 			index_remove(idx_key_t key) { return RCOK; };

@@ -5,6 +5,7 @@
 #include "table.h"
 #include "index_hash.h"
 #include "index_btree.h"
+#include "btree_store.h"
 #include "catalog.h"
 #include "mem_alloc.h"
 
@@ -80,20 +81,32 @@ RC workload::init_schema(string schema_file) {
 			}
 			
 			string tname(items[0]);
-			INDEX * index = (INDEX *) _mm_malloc(sizeof(INDEX), 64);
-			new(index) INDEX();
+
 			int part_cnt = (CENTRAL_INDEX)? 1 : g_part_cnt;
 			if (tname == "ITEM")
 				part_cnt = 1;
-#if INDEX_STRUCT == IDX_HASH
-	#if WORKLOAD == YCSB
-			index->init(part_cnt, tables[tname], g_synth_table_size * 2);
-	#elif WORKLOAD == TPCC
-			assert(tables[tname] != NULL);
-			index->init(part_cnt, tables[tname], stoi( items[1] ) * part_cnt);
-	#endif
-#else
-			index->init(part_cnt, tables[tname]);
+
+#if ENGINE_TYPE == PTR0
+//            INDEX * index = index_btree_store::GetInstance();
+            INDEX * index = (INDEX *) _mm_malloc(sizeof(INDEX), 64);
+            new(index) INDEX();
+            index->init_btree_store(sizeof(idx_key_t), tables[tname]);
+#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
+    #if INDEX_STRUCT == IDX_HASH
+            INDEX * index = (INDEX *) _mm_malloc(sizeof(INDEX), 64);
+            new(index) INDEX();
+        #if WORKLOAD == YCSB
+                index->init(part_cnt, tables[tname], g_synth_table_size * 2);
+        #elif WORKLOAD == TPCC
+                assert(tables[tname] != NULL);
+                index->init(part_cnt, tables[tname], stoi( items[1] ) * part_cnt);
+        #endif
+    #elif INDEX_STRUCT == IDX_BTREE
+                INDEX * index = (INDEX *) _mm_malloc(sizeof(INDEX), 64);
+                new(index) INDEX();
+//                index->init(part_cnt, tables[tname]);
+                index->init_btree_store(sizeof(idx_key_t), tables[tname]);
+    #endif
 #endif
 			indexes[iname] = index;
 		}

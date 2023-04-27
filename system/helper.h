@@ -6,6 +6,37 @@
 #include "global.h"
 
 
+//===----------------------------------------------------------------------===//
+// Handy macros to hide move/copy class constructors
+//===----------------------------------------------------------------------===//
+
+// Macros to disable copying and moving
+#define DISALLOW_COPY(cname)     \
+  cname(const cname &) = delete; \
+  cname &operator=(const cname &) = delete;
+
+#define DISALLOW_MOVE(cname) \
+  cname(cname &&) = delete;  \
+  cname &operator=(cname &&) = delete;
+
+#define DISALLOW_COPY_AND_MOVE(cname) \
+  DISALLOW_COPY(cname);               \
+  DISALLOW_MOVE(cname);
+/**
+ * Used to mark a class as only obtainable from reinterpreting a chunk of memory initialized as byte array or a buffer.
+ *
+ * Such classes typically have variable-length objects, that the c++ compiler cannot initialize or lay out correctly as
+ * local variables. Thus we will have to keep track of the memory space and take care to only refer to these objects
+ * with pointers.
+ *
+ * Typically classes marked with these will expose static factory methods that calculate the size of an object in memory
+ * given some parameters and an Initialize method to construct a valid object from pointer to a chunk of memory
+ */
+#define MEM_REINTERPRETATION_ONLY(cname) \
+  cname() = delete;                      \
+  DISALLOW_COPY_AND_MOVE(cname)          \
+  ~cname() = delete;
+
 /************************************************/
 // atomic operations
 /************************************************/
