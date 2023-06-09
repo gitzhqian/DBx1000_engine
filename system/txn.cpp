@@ -69,8 +69,45 @@ ts_t txn_man::get_ts() {
 
 void txn_man::cleanup(RC rc) {
 #if CC_ALG == HEKATON
-	row_cnt = 0;
-	wr_cnt = 0;
+    //insert index
+    auto ins_cnt = this->insert_cnt;
+    if (ins_cnt > 0 && rc == RCOK) {
+        for (int rid = 0; rid < ins_cnt; rid++) {
+            row_t *ins_row = this->insert_rows[rid];
+            auto index_ = h_wl->indexes["MAIN_INDEX"];
+            char *data = ins_row->data;
+            idx_key_t key = ins_row->get_primary_key();
+            void *row_item = nullptr;
+            row_t *new_row = nullptr;
+#if  ENGINE_TYPE == PTR0
+            rc = index_->index_insert(key, row_item, data);
+#elif ENGINE_TYPE == PTR1
+            uint64_t new_row_addr = reinterpret_cast<uint64_t>(ins_row);
+            char *data_ = reinterpret_cast<char *>(&new_row_addr);
+            rc = index_->index_insert(key, row_item, data_);
+#elif ENGINE_TYPE == PTR2
+            itemid_t * m_item =
+                (itemid_t *) mem_allocator.alloc( sizeof(itemid_t), ins_row->get_part_id());
+            assert(m_item != NULL);
+            m_item->type = DT_row;
+            m_item->valid = true;
+            m_item->location = ins_row;
+            uint64_t new_row_addr = reinterpret_cast<uint64_t>(m_item);
+            char *data_ = reinterpret_cast<char *>(&new_row_addr);
+            rc = index_->index_insert(key, row_item, data_);
+#endif
+            if(rc==RCOK){
+                new_row = reinterpret_cast<row_t *>(row_item);
+
+                auto insrt_lock = ATOM_CAS(new_row->valid, false, true);
+                assert(insrt_lock);
+            }
+
+            //delete ins_row;
+        }
+    }
+    row_cnt = 0;
+    wr_cnt = 0;
 	insert_cnt = 0;
 	return;
 #endif
@@ -190,7 +227,7 @@ void txn_man::insert_row(row_t * row, table_t * table) {
 		return;
 	assert(insert_cnt < MAX_ROW_PER_TXN);
 
-	insert_rows[insert_cnt ++] = row;
+	insert_rows[insert_cnt++] = row;
 }
 
 void *
@@ -240,36 +277,6 @@ RC txn_man::finish(RC rc) {
 #else 
 	cleanup(rc);
 #endif
-
-	//insert index
-    for (int rid = 0; rid < insert_cnt; rid ++) {
-        row_t *ins_row = insert_rows[rid];
-        auto index_ = h_wl->indexes["MAIN_INDEX"];
-        char *data = ins_row->data;
-        idx_key_t key = *reinterpret_cast<uint64_t *>(data);
-        void *row_item;
-        row_t * new_row = NULL;
-#if  ENGINE_TYPE == PTR0
-        rc = index_->index_insert(key, row_item, data+sizeof(idx_key_t));
-#elif ENGINE_TYPE == PTR1
-        uint64_t new_row_addr = reinterpret_cast<uint64_t>(ins_row);
-        char *data_ = reinterpret_cast<char *>(&new_row_addr);
-        rc = index_->index_insert(key, row_item, data_);
-#elif ENGINE_TYPE == PTR2
-		itemid_t * m_item =
-			(itemid_t *) mem_allocator.alloc( sizeof(itemid_t), ins_row->get_part_id());
-		assert(m_item != NULL);
-		m_item->type = DT_row;
-		m_item->valid = true;
-        m_item->location = ins_row;
-        uint64_t new_row_addr = reinterpret_cast<uint64_t>(m_item);
-        char *data_ = reinterpret_cast<char *>(&new_row_addr);
-        rc = index_->index_insert(key, row_item, data_);
-#endif
-        new_row = reinterpret_cast<row_t *>(row_item);
-        auto insrt_lock = ATOM_CAS(new_row->valid, false, true);
-        assert(insrt_lock);
-    }
 
 	uint64_t timespan = get_sys_clock() - starttime;
 	INC_TMP_STATS(get_thd_id(), time_man,  timespan);

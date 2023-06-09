@@ -21,8 +21,8 @@ int ycsb_wl::next_tid;
 RC ycsb_wl::init() {
 	workload::init();
 	next_tid = 0;
-	string path = "/home/zhangqian/code/DBx1000/benchmarks/YCSB_schema.txt";
-    //string path = "/home/zq/DBx1000/benchmarks/YCSB_schema.txt";
+	string path = "/home/zhangqian/code/DBx1000_engine/benchmarks/YCSB_schema.txt";
+    //string path = "/home/zq/DBx1000_engine_ptr/DBx1000_engine/benchmarks/YCSB_schema.txt";
 
 	init_schema( path );
 	
@@ -125,8 +125,8 @@ void ycsb_wl::init_table_parallel() {
 
 	the_index->index_store_scan();
 	uint64_t tab_size = the_index->table_size.size();
-	printf("current table size:%lu \n", tab_size);
-
+	printf("current table index size:%lu \n", tab_size);
+    printf("current table size:%lu \n", the_table->get_table_size());
 }
 
 void * ycsb_wl::init_table_slice() {
@@ -141,27 +141,23 @@ void * ycsb_wl::init_table_slice() {
 	while ((UInt32)ATOM_FETCH_ADD(next_tid, 0) < g_init_parallelism) {}
 	assert((UInt32)ATOM_FETCH_ADD(next_tid, 0) == g_init_parallelism);
 	double slice_size = (double)g_synth_table_size / (double)g_init_parallelism;
+    auto tuple_size = the_table->schema->tuple_size;
+    char *data;
 	for (uint64_t key = ceil(slice_size * tid);
 			key < min(slice_size * (tid + 1),(double)g_synth_table_size); key ++) {
 		row_t * new_row = NULL;
 
 #if ENGINE_TYPE == PTR0
-        retry_insrt:
+        tuple_size = PAYLOAD_SIZE;
         idx_key_t key_insr = key;
-        auto tuple_size = the_table->schema->tuple_size;
-        char *data = (char *) _mm_malloc(tuple_size, 64);
-        auto fid_size = the_table->get_schema()->get_field_size(0);
-        auto fid_count = the_table->get_schema()->get_field_cnt();
-        for (UInt32 fid = 0; fid < fid_count; fid ++) {
-            char value[fid_size];
-            for (int i = 0; i < fid_size; ++i) {
-                value[i] = 'h';
-            }
-            int pos = fid+fid_size*fid;
-            memcpy( &data[pos], value, fid_size);
+        data = new char[tuple_size];
+        for (int fid = 0; fid < tuple_size; fid ++) {
+           data[fid] = 'h';
         }
         void *row_item;
+        this->the_table->get_next_row_id();
 
+        retry_insrt:
         rc = the_index->index_insert(key_insr, row_item, data);
 
         if (rc==RCOK){
@@ -170,13 +166,14 @@ void * ycsb_wl::init_table_slice() {
             M_ASSERT(insrt_lock, "insert a row_t, mark txn valid, locking failure.");
         }
 
-        delete data;
+        //delete data;
 
 #elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 		uint64_t row_id;
 		int part_id = key_to_part(key);
 		//printf("part_id = %d, key = %lu\n", part_id, key);
-		rc = the_table->get_new_row(new_row, part_id, row_id); 
+		rc = the_table->get_new_row(new_row, part_id, row_id);
+        //printf("the table size = %lu \n", the_table->get_table_size());
 		assert(rc == RCOK);
 		uint64_t primary_key = key;
 		new_row->set_primary_key(primary_key);
@@ -203,19 +200,17 @@ void * ycsb_wl::init_table_slice() {
 
         retry_insrt:
             void *row_item;
-    #if ENGINE_TYPE == PTR1
+#if ENGINE_TYPE == PTR1
 //            rc = the_index->index_insert(idx_key, new_row, part_id);
-
 	        uint64_t new_row_addr = reinterpret_cast<uint64_t>(new_row);
 	        char *data = reinterpret_cast<char *>(&new_row_addr);
             rc = the_index->index_insert(idx_key, row_item, data);
-    #elif ENGINE_TYPE == PTR2
+#elif ENGINE_TYPE == PTR2
 //            rc = the_index->index_insert(idx_key, m_item, part_id);
-
             uint64_t new_row_addr = reinterpret_cast<uint64_t>(m_item);
             char *data = reinterpret_cast<char *>(&new_row_addr);
             rc = the_index->index_insert(idx_key, row_item, data);
-    #endif
+#endif
         if (rc==RCOK){
             new_row = reinterpret_cast<row_t *>(row_item);
             auto insrt_lock = ATOM_CAS(new_row->valid, false, true);

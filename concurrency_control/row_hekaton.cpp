@@ -50,7 +50,7 @@ Row_hekaton::doubleHistory()
 RC Row_hekaton:: access(txn_man * txn, TsType type, row_t * row) {
 	RC rc = RCOK;
 #if ENGINE_TYPE == PTR0
-	if(type == O_REQ){
+	if(type == O_REQ || type == S_REQ){
 		//if read-only, just return OK
 		rc = RCOK;
 		txn->cur_row = row;
@@ -76,6 +76,7 @@ RC Row_hekaton:: access(txn_man * txn, TsType type, row_t * row) {
 			// ts is between _oldest_wts and _latest_wts, should find the correct version
 			uint32_t i = _his_latest;
 			bool find = false;
+            //__builtin_prefetch((reinterpret_cast<char *>(&_write_history[i]) + 2 * CACHE_LINE_SIZE), 0, 3);
 			while (true) {
 				i = (i == 0)? _his_len - 1 : i - 1;
 				if (_write_history[i].begin < ts) {
@@ -120,6 +121,12 @@ RC Row_hekaton:: access(txn_man * txn, TsType type, row_t * row) {
 	}
 	blatch = false;
 #elif ENGINE_TYPE == PTR1 || ENGINE_TYPE ==PTR2
+    if(type == S_REQ){
+        rc = RCOK;
+        txn->cur_row = _write_history[_his_latest].row;
+        return rc;
+    }
+
 	ts_t ts = txn->get_ts();
 	while (!ATOM_CAS(blatch, false, true))
 		PAUSE

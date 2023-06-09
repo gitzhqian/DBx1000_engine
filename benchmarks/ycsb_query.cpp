@@ -123,7 +123,7 @@ void ycsb_query::gen_requests(uint64_t thd_id, workload * h_wl) {
 		lrand48_r(&_query_thd->buffer, &rint64);
 		req->value = rint64 % (1<<8);
 		// Make sure a single row is not accessed twice
-		if (req->rtype == RD || req->rtype == RO || req->rtype == WR  ) {
+		if (req->rtype == RD || req->rtype == RO || req->rtype == WR) {
 			if (all_keys.find(req->key) == all_keys.end()) {
 				all_keys.insert(req->key);
 				access_cnt ++;
@@ -131,9 +131,11 @@ void ycsb_query::gen_requests(uint64_t thd_id, workload * h_wl) {
 			    continue;
 			}
 		} else if(req->rtype == INS ){
-            req->key = h_wl->tables["MAIN_TABLE"]->get_next_row_id();
-            all_keys.insert(req->key);
+           // req->key = h_wl->tables["MAIN_TABLE"]->get_next_row_id();
+            all_keys.insert(tmp);
+           // all_keys.insert(row_id);
             access_cnt ++;
+            g_key_order = false;
 		} else {
 			bool conflict = false;
 			for (UInt32 i = 0; i < req->scan_len; i++) {

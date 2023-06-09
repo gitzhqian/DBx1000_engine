@@ -187,7 +187,7 @@ public:
 class row_t{
 public:
 
-    row_t():data(nullptr),location(nullptr),manager(nullptr), key_size(0), version_t(0){ };
+    row_t():data(nullptr),location(nullptr),manager(nullptr), key_size(0), version_t(0){};
     row_t(uint8_t version_t): version_t(0){ };
 
 	RC init(table_t * host_table, uint64_t part_id, uint64_t row_id = 0, uint32_t tuple_size = 0);
@@ -205,6 +205,14 @@ public:
 	void copy(row_t * src);
 
 #if ENGINE_TYPE == PTR0
+    void set_primary_key(uint64_t key) {
+        memcpy(primary_key, reinterpret_cast<char *>(&key), sizeof(uint64_t));
+
+    };
+    uint64_t get_primary_key() {
+        uint64_t key_ = *reinterpret_cast<uint64_t *>(primary_key);
+        return key_;
+    };
 #elif (ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2)
 	void 		set_primary_key(uint64_t key) { _primary_key = key; };
     void 		set_part_id(uint64_t part_id) { _part_id = part_id; };
@@ -265,6 +273,7 @@ public:
 
     void * location; //pointing to the location that holds the realtime location
     uint32_t key_size;
+    char primary_key[8];
     // low bits -->
     // [ chasing | inserting |  visible|  txn valid ]
     // [  0..1  |   1..2   |    2..3   |   3..4    ]

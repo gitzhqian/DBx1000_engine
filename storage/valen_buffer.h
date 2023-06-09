@@ -5,6 +5,7 @@
 #include "object_pool.h"
 #include "config.h"
 #include "tbb/concurrent_unordered_map.h"
+#include <list>
 /**
 * A RecordBufferSegment is a piece of (reusable) memory used to hold undo records. The segment internally keeps track
 * of its memory usage.
@@ -67,6 +68,7 @@ public:
     ValenBuffer *Reset() {
         size_ = 0;
         count_ = 0;
+        memset(buffer_data_,0,BUFFER_SEGMENT_SIZE);
         return this;
     }
 
@@ -156,14 +158,27 @@ public:
      */
     bool Empty() const { return buffers_.empty(); }
 
-    void Erase(uint32_t index_) const{
-        ValenBuffer *val_buffer_ = buffers_[index_];
-        val_buffer_->Erase();
-        if (val_buffer_->CurrentCount() == 0){
-            ValenBuffer *free_ = val_buffer_->Reset();
-            buffer_pool_->Release(free_, 1);
-//            LOG_DEBUG("release the inner node valen buffer");
+    void Erase(uint32_t index_) {
+        ValenBuffer *val_buffer_;
+        auto i=0;
+        for (auto begin = buffers_.begin() ; begin != buffers_.end(); ++begin)
+        {
+            if (i==index_){
+                val_buffer_ = *begin;
+
+                val_buffer_->Erase();
+                if (val_buffer_->CurrentCount() == 0){
+                    ValenBuffer *free_ = val_buffer_->Reset();
+//                    buffers_.remove(val_buffer_);
+                    buffers_.erase(begin);
+                    //memset(reinterpret_cast<char *>(val_buffer_), 0, BUFFER_SEGMENT_SIZE);
+                    buffer_pool_->Release(free_, 1);
+                }
+                break;
+            }
+            i++;
         }
+
 //        LOG_DEBUG("erase the record segment of the inner node valen buffer");
     }
     /**
@@ -178,7 +193,7 @@ public:
             ValenBuffer *new_segment = nullptr;
             bool rel = false;
             while(!rel){
-                new_segment = buffer_pool_->Get(1);
+                new_segment = reinterpret_cast<ValenBuffer *>(buffer_pool_->Get(1));
                 if(new_segment != nullptr)
                 {
                     rel = true;
@@ -191,6 +206,8 @@ public:
             buffers_.push_back(new_segment);
         }
         last_record_ = buffers_.back()->Reserve(size);
+        assert(last_record_ != nullptr);
+
         latch.Unlock();
 
         return std::make_pair((buffers_.size()-1),last_record_);
@@ -205,7 +222,9 @@ public:
 private:
     SpinLatch latch;
     RecordBufferPool *buffer_pool_;
-    std::vector<ValenBuffer *> buffers_;
+    std::list<ValenBuffer *> buffers_;
+
+
     char *last_record_ = nullptr;
 };
 

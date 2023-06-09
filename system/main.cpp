@@ -9,6 +9,7 @@
 #include "plock.h"
 #include "occ.h"
 #include "vll.h"
+#include "btree_store.h"
 
 void * f(void *);
 
@@ -103,6 +104,12 @@ int main(int argc, char* argv[])
 	} else {
 		((TestWorkload *)m_wl)->summarize();
 	}
+
+	//finally, compute current table size
+	auto the_index = m_wl->indexes["MAIN_INDEX"];
+    the_index->index_store_scan();
+    uint64_t tab_size = the_index->table_size.size();
+    printf("current table size:%lu \n", tab_size);
 	return 0;
 }
 

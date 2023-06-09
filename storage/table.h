@@ -17,6 +17,7 @@ public:
 	// new row.	
 	RC get_new_row(row_t *& row); // this is equivalent to insert()
 	RC get_new_row(row_t *& row, uint64_t part_id, uint64_t &row_id);
+    RC get_new_row(row_t *& row, int tuple_size);
 	RC init_row(row_t *& row);
 
 	void delete_row(); // TODO delete_row is not supportet yet

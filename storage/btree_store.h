@@ -182,10 +182,11 @@ public:
         }
         int cmp;
 
-        if (std::min(size1, size2) < 16) {
-            cmp = my_memcmp(key1, key2, std::min<uint32_t>(size1, size2));
+        size_t min_size = std::min<size_t>(size1, size2);
+        if (min_size < 16) {
+            cmp = my_memcmp(key1, key2, min_size);
         } else {
-            cmp = memcmp(key1, key2, std::min<uint32_t>(size1, size2));
+            cmp = memcmp(key1, key2, min_size);
         }
         if (cmp == 0) {
             return size1 - size2;
@@ -199,30 +200,6 @@ public:
             }
         }
         return 0;
-    }
-    struct myCmp{
-        bool operator() (const std::pair<uint32_t, row_t> &a,
-                          const std::pair<uint32_t, row_t> &b) const{
-            return a.first < b.first;
-        }
-    };
-    // Check if the key in a range, inclusive
-    // -1 if smaller than left key
-    // 1 if larger than right key
-    // 0 if in range
-    static const inline int KeyInRange(const char *key, uint32_t size,
-                                       const char *key_left, uint32_t size_left,
-                                       const char *key_right, uint32_t size_right) {
-        auto cmp = KeyCompare(key_left, size_left, key, size);
-        if (cmp > 0) {
-            return -1;
-        }
-        cmp = KeyCompare(key, size, key_right, size_right);
-        if (cmp <= 0) {
-            return 0;
-        } else {
-            return 1;
-        }
     }
 
     // Set the frozen bit to prevent future modifications to the node
@@ -257,8 +234,6 @@ public:
                      InnerNodeBuffer *inner_node_buffer)   {
         auto entry_ = inner_node_buffer->NewEntry(alloc_size);
         char *inner_node_ = entry_.second;
-//        char *inner_node_ = (char *)_mm_malloc(alloc_size, 64);
-
 
         *new_node = reinterpret_cast<InternalNode *>(inner_node_);
         memset((*new_node), 0, alloc_size);
@@ -278,7 +253,6 @@ public:
 
         auto entry_ = inner_node_buffer->NewEntry(alloc_size);
         char *inner_node_ = entry_.second;
-//        char *inner_node_ = (char *)_mm_malloc(alloc_size, 64);
         *new_node = reinterpret_cast<InternalNode *>(inner_node_);
         memset((*new_node), 0, alloc_size);
 
@@ -292,20 +266,19 @@ public:
     static void  New(  char * key, uint32_t key_size, uint64_t left_child_addr,
                      uint64_t right_child_addr, InternalNode **new_node,
                      InnerNodeBuffer *inner_node_buffer) {
-        size_t alloc_size = sizeof(InternalNode) +
-                            row_m::PadKeyLength(key_size) +
-                            sizeof(left_child_addr) + sizeof(right_child_addr) +
-                            sizeof(row_m) * 2;
+        size_t alloc_size = sizeof(InternalNode);
+        alloc_size = alloc_size + row_m::PadKeyLength(key_size);
+        alloc_size = alloc_size + sizeof(left_child_addr) + sizeof(right_child_addr);
+        alloc_size = alloc_size + sizeof(row_m) * 2;
 
         auto entry_ = inner_node_buffer->NewEntry(alloc_size);
         char *inner_node_ = entry_.second;
-//        char *inner_node_ = (char *)_mm_malloc(alloc_size, 64);
 
         *new_node = reinterpret_cast<InternalNode *>(inner_node_);
         memset((*new_node), 0, alloc_size);
 
-        new(*new_node) InternalNode(alloc_size, key, key_size, left_child_addr,
-                               right_child_addr);
+        new(*new_node) InternalNode(alloc_size, key, key_size,
+                                    left_child_addr, right_child_addr);
         (*new_node)->segment_index = entry_.first;
     }
     static void  New(InternalNode *src_node, uint32_t begin_meta_idx,
@@ -330,13 +303,12 @@ public:
 
         // Add the new key, if provided
         if (key) {
-            M_ASSERT(key_size > 0,"key_size > 0.");
+            M_ASSERT(key_size > 0, "key_size > 0.");
             alloc_size += (row_m::PadKeyLength(key_size) + sizeof(uint64_t) + sizeof(row_m));
         }
 
         auto entry_ = inner_node_buffer->NewEntry(alloc_size);
         char *inner_node_ = entry_.second;
-//        char *inner_node_ = (char *)_mm_malloc(alloc_size, 64);
         *new_node = reinterpret_cast<InternalNode *>(inner_node_);
         memset(*new_node, 0, alloc_size);
 
@@ -363,13 +335,12 @@ public:
                            char * key, uint32_t key_size,
                          uint64_t left_child_addr, uint64_t right_child_addr,
                          InternalNode **new_node, bool backoff,
-                          InnerNodeBuffer *inner_node_buffer);
+                         InnerNodeBuffer *inner_node_buffer);
 
     uint32_t GetChildIndex(  char * key, uint16_t key_size, bool get_le = true);
 
     inline uint64_t *GetPayloadPtr(row_m meta) {
-        char *ptr = reinterpret_cast<char *>(this) + meta.GetOffset()
-                    + meta.GetPaddedKeyLength();
+        char *ptr = reinterpret_cast<char *>(this) + meta.GetOffset() + meta.GetPaddedKeyLength();
         return reinterpret_cast<uint64_t *>(ptr);
     }
 
@@ -377,10 +348,9 @@ public:
 
     inline BaseNode *GetChildByMetaIndex(uint32_t index) {
         uint64_t child_addr;
+        row_m red_child = this->row_meta[index];
 
-        row_m red_child = row_meta[index];
         GetRawRow(red_child, nullptr, nullptr, &child_addr);
-//        LOG_DEBUG("child_addr = %lu, index = %u", child_addr, index);
 
         BaseNode *rt_node = reinterpret_cast<BaseNode *> (child_addr);
         return rt_node;
@@ -436,8 +406,9 @@ public:
     static void New(LeafNode **mem, uint32_t node_size, DramBlockPool *leaf_node_pool);
 
     static inline uint32_t GetUsedSpace(NodeHeader::StatusWord status) {
-        uint32_t used_space = sizeof(LeafNode) + status.GetBlockSize() +
-                              status.GetRecordCount() * sizeof(row_t);
+        uint32_t used_space = sizeof(LeafNode);
+        used_space = used_space + status.GetBlockSize();
+        used_space = used_space + (status.GetRecordCount() * sizeof(row_t));
 //        LOG_DEBUG("LeafNode::GetUsedSpace: %u ",used_space);
         return used_space;
     }
@@ -446,8 +417,8 @@ public:
 
     ~LeafNode() = default;
 
-    ReturnCode Insert(  char * key, uint16_t key_size,
-                        char *payload, uint32_t payload_size,
+    ReturnCode Insert(char * key, uint16_t key_size,
+                      char *payload, uint32_t payload_size,
                       row_t **meta,
                       uint32_t split_threshold ,
                       DualPointer **dural_pointer);
@@ -468,7 +439,7 @@ public:
                   typename std::vector<row_t>::iterator end_it,
                   uint32_t payload_size );
 
-    ReturnCode RangeScanBySize(  char * key1,
+    ReturnCode RangeScanBySize(char * key1,
                                uint32_t size1,
                                uint32_t to_scan,
                                std::list<row_t *> *result);
@@ -487,9 +458,9 @@ private:
         IsUnique, Duplicate, ReCheck, NodeFrozen
     };
 
-    Uniqueness CheckUnique(   char * key, uint32_t key_size);
+    Uniqueness CheckUnique(char * key, uint32_t key_size);
 
-    Uniqueness RecheckUnique(   char * key, uint32_t key_size, uint32_t end_pos);
+    Uniqueness RecheckUnique(char * key, uint32_t key_size, uint32_t end_pos);
 };
 
 class index_btree_store;
@@ -554,12 +525,6 @@ public:
     RC	index_read(idx_key_t key, void * &item, int part_id = -1);
     RC	index_read(idx_key_t key, void * &item, int part_id=-1, int thd_id=0);
 
-
-    // init a new tree
-//    static index_btree_store *GetInstance();
-//    index_btree_store();
-//    ~index_btree_store();
-
     void init_btree_store(uint32_t key_size, table_t * table_){
         ParameterSet param(SPLIT_THRESHOLD, MERGE_THRESHOLD,
                            DRAM_BLOCK_SIZE,
@@ -586,7 +551,7 @@ public:
         auto record_count = leaf_node->GetHeader()->GetStatus().GetRecordCount();
         for (uint32_t i = 0; i < record_count; ++i) {
             row_t meta = leaf_node->row_meta[i];
-            uint64_t key = *reinterpret_cast<uint64_t *>(meta.data);
+            uint64_t key = *reinterpret_cast<uint64_t *>(meta.primary_key);
 //            printf("leaf node key:%lu \n", key);
             table_size.insert(key);
         }
@@ -599,10 +564,10 @@ public:
             char *ptr = reinterpret_cast<char *>(inner_node) + meta.GetOffset() + meta.GetPaddedKeyLength();
             uint64_t node_addr =  *reinterpret_cast<uint64_t *>(ptr);
             BaseNode *node = reinterpret_cast<BaseNode *>(node_addr);
-            if (node->IsLeaf()) {
-                ScanLeafNode(node);
-            } else if (node == nullptr){
+            if (node == nullptr) {
                 break;
+            } else if (node->IsLeaf()){
+                ScanLeafNode(node);
             }else {
                 ScanInnerNode(node);
             }
@@ -622,7 +587,6 @@ public:
 
 private:
     ReturnCode Insert(  char *key, uint32_t key_size, char *payload, row_t **inrt_meta);
-//    ReturnCode Read(const char * key, uint32_t key_size , row_t *red_meta);
     int Scan(  char * start_key, uint32_t key_size , uint32_t range, void **output);
 
     bool ChangeRoot(uint64_t expected_root_addr, uint64_t new_root_addr);
@@ -633,14 +597,10 @@ private:
         return reinterpret_cast<BaseNode *>(root_node);
     }
 
-
-
-
     BaseNode *root;
     DramBlockPool *leaf_node_pool;
     InnerNodeBuffer *inner_node_pool;
     ParameterSet parameters;
-
 
 };
 
@@ -677,23 +637,26 @@ public:
         item_vec.pop_front();
 
         node = this->tree->TraverseToLeaf(nullptr,
-                                           last_record->data ,
+                                          reinterpret_cast<char *>(last_record->primary_key),
                                           key_size,
                                           false);
         if (node == nullptr) {
             return nullptr;
         }
         item_vec.clear();
-        char *last_key = last_record->data;
+//        char *last_key = last_record->data;
+        char *last_key = reinterpret_cast<char *>(last_record->primary_key);
         uint32_t last_len = key_size;
-        node->RangeScanBySize( last_key , last_len,
-                              remaining_size, &item_vec);
+        node->RangeScanBySize(last_key, last_len, remaining_size, &item_vec);
 
         // should fix traverse to leaf instead
         // check if we hit the same record
         if (!item_vec.empty()) {
             auto new_front = item_vec.front();
-            if (BaseNode::KeyCompare(new_front->data, key_size, last_record->data, key_size) == 0) {
+//            uint64_t n = *reinterpret_cast<char *>(new_front->primary_key);
+//            uint64_t l = *reinterpret_cast<char *>(last_record->primary_key);
+            if (BaseNode::KeyCompare(reinterpret_cast<char *>(new_front->primary_key), key_size,
+                                     reinterpret_cast<char *>(last_record->primary_key), key_size) == 0) {
                 item_vec.clear();
                 return last_record;
             }
@@ -703,7 +666,7 @@ public:
 
 
 private:
-      char * key;
+    char * key;
     uint32_t key_size;
     uint32_t remaining_size;
     index_btree_store *tree;

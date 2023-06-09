@@ -33,8 +33,10 @@ RC ycsb_txn_man::run_txn(base_query * query) {
     std::vector<std::pair<itemid_t *,std::pair<void *, void *>>> master_latest_;
     std::vector<std::pair<row_t *, char *>> master_latest_val_;
     Catalog * schema = wl->the_table->get_schema();
+    auto request_cnt = m_query->request_cnt;
+    auto tuple_size = _wl->the_table->schema->get_tuple_size();
 
-	for (uint32_t rid = 0; rid < m_query->request_cnt; rid ++) {
+	for (uint32_t rid = 0; rid < request_cnt; rid ++) {
 		ycsb_request * req = &m_query->requests[rid];
 		int part_id = wl->key_to_part( req->key );
 		bool finish_req = false;
@@ -76,26 +78,38 @@ RC ycsb_txn_man::run_txn(base_query * query) {
                 }
             }else if(type == INS){
                 row_t *new_row = NULL;
-                uint64_t row_id;
-                uint64_t primary_key = req->key;
-                auto part_id = key_to_part(primary_key);
-                rc = _wl->the_table->get_new_row(new_row, part_id, row_id);
-                assert(rc == RCOK);
+                uint64_t row_id = rid;
+                auto part_id = key_to_part(row_id);
+                uint64_t primary_key;
 #if ENGINE_TYPE != PTR0
+                rc = _wl->the_table->get_new_row(new_row,part_id,row_id);
+                primary_key = _wl->the_table->get_table_size();
                 new_row->set_primary_key(primary_key);
-#endif
-                strcpy(&(new_row->data)[0], reinterpret_cast<const char *>(&primary_key));
-                new_row->valid = true;
-                for (UInt32 fid = 1; fid < schema->get_field_cnt()+1; fid ++) {
-                    strcpy(&(new_row->data)[fid],"gggggggggg");
+                for (int fid = 0; fid < tuple_size; fid ++) {
+                    new_row->data[fid] = 'h';
                 }
-                insert_row(new_row, _wl->the_table);
+#elif ENGINE_TYPE == PTR0
+                tuple_size = PAYLOAD_SIZE;
+                rc = _wl->the_table->get_new_row(new_row, tuple_size);
+                primary_key = _wl->the_table->get_table_size();
+                new_row->set_primary_key(primary_key);
+                for (int fid = 0; fid < tuple_size; fid ++) {
+                    new_row->data[fid] = 'h';
+                }
+#endif
+                assert(rc == RCOK);
 
+                insert_row(new_row, _wl->the_table);
                 finish_req = true;
-                continue;
+
+                if (rid >= request_cnt){
+                    goto final;
+                }else{
+                    continue;
+                }
             }
 
-			if (vd_row == NULL){
+			if (vd_row == nullptr){
                 iteration ++;
                 finish_req = true;
                 continue;
@@ -104,9 +118,12 @@ RC ycsb_txn_man::run_txn(base_query * query) {
             row_t * row_local;
 
 #if ENGINE_TYPE == PTR0
-//            row = reinterpret_cast<row_t *>(vd_row);
+            //row = reinterpret_cast<row_t *>(vd_row);
             if(type == SCAN){
-                row_local = reinterpret_cast<row_t *>(vd_row);
+//                row_local = reinterpret_cast<row_t *>(vd_row);
+                //when workload is scan/update
+                type = RD; //RO, when workload is scan/insert
+                row_local = get_row(vd_row, type);
                 if(!row_local->valid || row_local->IsInserting()) continue;
             }else{
                 row_local = get_row(vd_row, type);
@@ -114,19 +131,41 @@ RC ycsb_txn_man::run_txn(base_query * query) {
 
 #elif ENGINE_TYPE == PTR1
             row = reinterpret_cast<row_t *>(vd_row);// row_t meta
-            char *key = row->data;
-            uint64_t payload = *reinterpret_cast<uint64_t *>(key + sizeof(idx_key_t));
+//            char *key = row->data;
+//            uint64_t payload = *reinterpret_cast<uint64_t *>(key + sizeof(idx_key_t));
+//            char *key = reinterpret_cast<char *>(row->primary_key);
+            if (row->data == nullptr){
+                iteration ++;
+                finish_req = true;
+                continue;
+            }
+            uint64_t payload = *reinterpret_cast<uint64_t *>(row->data);
             row_t *vd_row_ = reinterpret_cast<row_t *>(payload);
             master_row = reinterpret_cast<void *>(vd_row_);
+            if(type == SCAN){
+               //when workload is scan/update
+               type = RD; //SCAN, when workload is scan/insert
+            }
             row_local = get_row(master_row, type);
 #elif ENGINE_TYPE == PTR2
 //            m_item = (itemid_t *) vd_row;
 //            row_local = get_row(m_item->location, type);
             row = reinterpret_cast<row_t *>(vd_row);// row_t meta
-            char *key = row->data;
-            uint64_t payload = *reinterpret_cast<uint64_t *>(key + sizeof(idx_key_t));
+//            char *key = row->data;
+//            uint64_t payload = *reinterpret_cast<uint64_t *>(key + sizeof(idx_key_t));
+//            char *key = reinterpret_cast<char *>(row->primary_key);
+            if (row->data == nullptr){
+                iteration ++;
+                finish_req = true;
+                continue;
+            }
+            uint64_t payload = *reinterpret_cast<uint64_t *>(row->data);
             m_item = reinterpret_cast<itemid_t *>(payload);
             master_row = m_item->location;
+            if(type == SCAN){
+               //when workload is scan/update
+               type = RD; //SCAN, when workload is scan/insert
+            }
             row_local = get_row(master_row, type);
 #endif
 
@@ -141,8 +180,8 @@ RC ycsb_txn_man::run_txn(base_query * query) {
                     char * data = row_local->data;
                     auto fild_count = schema->get_field_cnt();
 #if ENGINE_TYPE == PTR0
-                    data = data + KEY_SIZE;
-                    __attribute__((unused)) char * value = (&data[100]);
+//                    data = data + KEY_SIZE;
+                    __attribute__((unused)) char * value = (&data[tuple_size]);
 #elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
                     for (int fid = 0; fid < fild_count; fid++) {
                         __attribute__((unused)) char * fid_value = (&data[fid * 10]);
@@ -152,10 +191,10 @@ RC ycsb_txn_man::run_txn(base_query * query) {
                     assert(req->rtype == WR);
                     char *update_location;
                     auto fild_count = schema->get_field_cnt();
-                    char *value_upt = (char *) _mm_malloc(100, 64);;
+                    char *value_upt = (char *) _mm_malloc(tuple_size, 64);;
 #if ENGINE_TYPE == PTR2
                     update_location = row_local->data;
-                    auto master_latest = std::make_pair(master_row,row_local);
+                    auto master_latest = std::make_pair(master_row, row_local);
                     master_latest_.emplace_back(m_item, master_latest);
 #elif ENGINE_TYPE == PTR1
                     update_location = row_local->data;
@@ -189,35 +228,34 @@ RC ycsb_txn_man::run_txn(base_query * query) {
 	rc = RCOK;
 
 final:
-	rc = finish(rc);
+    rc = finish(rc);
 
-    if (rc == RCOK) {
-    #if ENGINE_TYPE == PTR2
-        auto sz = master_latest_.size();
-        for (int rid = 0; rid < sz; ++rid) {
-            auto master_loc = master_latest_[rid].first;
-            auto master_curr = master_latest_[rid].second.first;
-            auto master_latest = master_latest_[rid].second.second;
-            ATOM_CAS(master_loc->location, master_curr,reinterpret_cast<void *>(master_latest));
-        }
-    #elif EENGINE_TYPE == PTR0
-        auto sz = master_latest_val_.size();
-        for (int rid = 0; rid < sz; ++rid) {
-            auto master_loc = master_latest_val_[rid].first;
-            auto value_upt = master_latest_val_[rid].second;
-            auto data_location = reinterpret_cast<DualPointer *>(master_loc->location);
-            auto row_meta = reinterpret_cast<row_t *>(data_location->row_t_location);
-            char *update_location = row_meta->data + KEY_SIZE;
-            memcpy(update_location, value_upt, 100);
+    if ((!master_latest_val_.empty() || !master_latest_.empty()) && rc == RCOK) {
+        #if ENGINE_TYPE == PTR2
+            auto sz = master_latest_.size();
+            for (int rid = 0; rid < sz; ++rid) {
+                auto master_loc = master_latest_[rid].first;
+                auto master_curr = master_latest_[rid].second.first;
+                auto master_latest = master_latest_[rid].second.second;
+                ATOM_CAS(master_loc->location, master_curr,reinterpret_cast<void *>(master_latest));
+            }
+        #elif EENGINE_TYPE == PTR0
+            auto sz = master_latest_val_.size();
+            for (int rid = 0; rid < sz; ++rid) {
+                auto master_loc = master_latest_val_[rid].first;
+                auto value_upt = master_latest_val_[rid].second;
+                auto data_location = reinterpret_cast<DualPointer *>(master_loc->location);
+                auto row_meta = reinterpret_cast<row_t *>(data_location->row_t_location);
+                char *update_location = row_meta->data;
+                memcpy(update_location, value_upt, tuple_size);
 
-            delete value_upt;
-        }
+                delete value_upt;
+            }
 
-    #endif
+        #endif
+        master_latest_.clear();
+        master_latest_val_.clear();
     }
-
-    master_latest_.clear();
-    master_latest_val_.clear();
 
 	return rc;
 }

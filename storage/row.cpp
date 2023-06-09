@@ -35,7 +35,7 @@ row_t::init(table_t * host_table, uint64_t part_id, uint64_t row_id, uint32_t tu
 	return RCOK;
 }
 void 
-row_t::init(int size) 
+row_t::init(int size)
 {
 #if ENGINE_TYPE == PTR0
     data = (char *) _mm_malloc(size, 64);
@@ -245,7 +245,8 @@ RC row_t::get_row(access_t type, txn_man * txn, row_t *& row){
   #endif
 
 	// TODO need to initialize the table/catalog information.
-	TsType ts_type = (type == RD || type == SCAN)? R_REQ : P_REQ;
+	TsType ts_type = (type == RD)? R_REQ : P_REQ;
+    ts_type = (type == SCAN)? S_REQ : ts_type;
     ts_type = (type == RO)? O_REQ : ts_type;
 	rc = this->manager->access(txn, ts_type, row);
 

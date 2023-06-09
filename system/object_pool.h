@@ -179,14 +179,14 @@
          */
         void Release(T *obj, int inner_or_leaf_or_log) {
             M_ASSERT(obj != nullptr, "releasing a null pointer");
-            SpinLatch::ScopedSpinLatch guard(&latch_);
+            latch_.Lock();
             if (reuse_queue_.size() >= reuse_limit_) {
                 alloc_.Delete(obj);
                 current_size_--;
             } else {
                 reuse_queue_.push(obj);
             }
-
+            latch_.Unlock();
 //           std::cout << "object pool release, current size:" << current_size_
 //                     <<", size limit :"<< size_limit_
 //                     <<", release object: " << inner_or_leaf_or_log << std::endl;
