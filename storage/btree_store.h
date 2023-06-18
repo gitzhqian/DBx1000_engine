@@ -18,11 +18,11 @@ constexpr static float MAX_FREEZE_RETRY = 5;
 constexpr static float MAX_INSERT_RETRY = 5;
 
 struct ParameterSet {
-       uint32_t split_threshold;
-       uint32_t merge_threshold;
-       uint32_t leaf_node_size;
-     uint32_t payload_size;
-     uint32_t key_size;
+    uint32_t split_threshold;
+    uint32_t merge_threshold;
+    uint32_t leaf_node_size;
+    uint32_t payload_size;
+    uint32_t key_size;
 
     ParameterSet() : split_threshold(3072), merge_threshold(1024),
                      leaf_node_size(4096), payload_size(8), key_size(8) {}
@@ -647,6 +647,14 @@ public:
 //        char *last_key = last_record->data;
         char *last_key = reinterpret_cast<char *>(last_record->primary_key);
         uint32_t last_len = key_size;
+
+//        auto count = node->GetHeader()->status.GetRecordCount();
+//        uint32_t prefetch_length = sizeof(row_t) * count;
+//        uint32_t prefetch_count = (prefetch_length / CACHE_LINE_SIZE);
+//        for (uint32_t i = 0; i < prefetch_count; ++i) {
+//            __builtin_prefetch((const void *) ((char *) node + i * CACHE_LINE_SIZE), 0, 3);
+//        }
+
         node->RangeScanBySize(last_key, last_len, remaining_size, &item_vec);
 
         // should fix traverse to leaf instead

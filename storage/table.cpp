@@ -33,6 +33,7 @@ RC table_t::get_new_row(row_t *& row, int tuple_size) {
     RC rc = RCOK;
 
     cur_tab_size.fetch_add(1);
+
     row = (row_t *) _mm_malloc(sizeof(row_t), 64);
     row->init(tuple_size);
 

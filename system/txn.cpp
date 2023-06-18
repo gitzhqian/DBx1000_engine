@@ -70,6 +70,7 @@ ts_t txn_man::get_ts() {
 void txn_man::cleanup(RC rc) {
 #if CC_ALG == HEKATON
     //insert index
+#if ENGINE_TYPE != PTR0
     auto ins_cnt = this->insert_cnt;
     if (ins_cnt > 0 && rc == RCOK) {
         for (int rid = 0; rid < ins_cnt; rid++) {
@@ -79,9 +80,9 @@ void txn_man::cleanup(RC rc) {
             idx_key_t key = ins_row->get_primary_key();
             void *row_item = nullptr;
             row_t *new_row = nullptr;
-#if  ENGINE_TYPE == PTR0
-            rc = index_->index_insert(key, row_item, data);
-#elif ENGINE_TYPE == PTR1
+//#if  ENGINE_TYPE == PTR0
+//            rc = index_->index_insert(key, row_item, data);
+#if ENGINE_TYPE == PTR1
             uint64_t new_row_addr = reinterpret_cast<uint64_t>(ins_row);
             char *data_ = reinterpret_cast<char *>(&new_row_addr);
             rc = index_->index_insert(key, row_item, data_);
@@ -96,16 +97,17 @@ void txn_man::cleanup(RC rc) {
             char *data_ = reinterpret_cast<char *>(&new_row_addr);
             rc = index_->index_insert(key, row_item, data_);
 #endif
-            if(rc==RCOK){
-                new_row = reinterpret_cast<row_t *>(row_item);
-
-                auto insrt_lock = ATOM_CAS(new_row->valid, false, true);
-                assert(insrt_lock);
-            }
+//            if(rc==RCOK){
+//                new_row = reinterpret_cast<row_t *>(row_item);
+//
+//                auto insrt_lock = ATOM_CAS(new_row->valid, false, true);
+//                assert(insrt_lock);
+//            }
 
             //delete ins_row;
         }
     }
+#endif
     row_cnt = 0;
     wr_cnt = 0;
 	insert_cnt = 0;
@@ -273,6 +275,7 @@ RC txn_man::finish(RC rc) {
 		cleanup(rc);
 #elif CC_ALG == HEKATON
 	rc = validate_hekaton(rc);
+	//maintain insert-rows in indexes
 	cleanup(rc);
 #else 
 	cleanup(rc);

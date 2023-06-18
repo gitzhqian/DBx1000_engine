@@ -15,7 +15,7 @@ txn_man::validate_hekaton(RC rc)
 #if ISOLATION_LEVEL == SERIALIZABLE
 	if (rc == RCOK) {
 		for (int rid = 0; rid < row_cnt; rid ++) {
-			if (accesses[rid]->type == WR || accesses[rid]->type == RO )
+			if (accesses[rid]->type == WR || accesses[rid]->type == RO)
 				continue;
 			rc = accesses[rid]->orig_row->manager->prepare_read(this, accesses[rid]->data, commit_ts);
 			if (rc == Abort)
@@ -25,7 +25,7 @@ txn_man::validate_hekaton(RC rc)
 #endif
 	// postprocess 
 	for (int rid = 0; rid < row_cnt; rid ++) {
-		if (accesses[rid]->type == RD || accesses[rid]->type == RO || accesses[rid]->type == SCAN){
+		if (accesses[rid]->type == RD || accesses[rid]->type == RO || accesses[rid]->type == SCAN || accesses[rid]->type == INS){
             continue;
 		}
 		accesses[rid]->orig_row->manager->post_process(this, commit_ts, rc);

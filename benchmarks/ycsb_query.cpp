@@ -4,6 +4,7 @@
 #include "wl.h"
 #include "ycsb.h"
 #include "table.h"
+#include "benchmark_common.h"
 
 uint64_t ycsb_query::the_n = 0;
 double ycsb_query::denom = 0;
@@ -90,7 +91,9 @@ void ycsb_query::gen_requests(uint64_t thd_id, workload * h_wl) {
 	}
 
 	int rid = 0;
-	for (UInt32 tmp = 0; tmp < g_req_per_query; tmp ++) {		
+    //auto table_size_ = h_wl->tables["MAIN_TABLE"]->get_table_size();
+    //ZipfDistribution zipf_s(table_size_ - 1, g_zipf_theta);
+	for (UInt32 tmp = 0; tmp < g_req_per_query; tmp ++) {
 		double r;
 		drand48_r(&_query_thd->buffer, &r);
 		ycsb_request * req = &requests[rid];
@@ -101,13 +104,11 @@ void ycsb_query::gen_requests(uint64_t thd_id, workload * h_wl) {
                 req->rtype = RD;
             } else if (r >= g_read_perc && r <= g_write_perc + g_read_perc) {
                 req->rtype = WR;
-            } else {
-                if (r < g_scan_perc){
-                    req->rtype = SCAN;
-                    req->scan_len = SCAN_LEN;
-                }else if(r >= g_scan_perc && r <= g_insert_perc + g_scan_perc){
-                    req->rtype = INS;
-                }
+            } else if(r >= (g_write_perc + g_read_perc) && r <= (g_write_perc + g_read_perc + g_scan_perc)) {
+                req->rtype = SCAN;
+                req->scan_len = SCAN_LEN;
+            } else{
+                req->rtype = INS;
             }
 		}
 
@@ -130,29 +131,37 @@ void ycsb_query::gen_requests(uint64_t thd_id, workload * h_wl) {
 			} else {
 			    continue;
 			}
-		} else if(req->rtype == INS ){
-           // req->key = h_wl->tables["MAIN_TABLE"]->get_next_row_id();
-            all_keys.insert(tmp);
+		} else if(req->rtype == INS){
+            req->key = h_wl->tables["MAIN_TABLE"]->get_next_row_id();
+            all_keys.insert(req->key);
            // all_keys.insert(row_id);
             access_cnt ++;
             g_key_order = false;
 		} else {
 			bool conflict = false;
-			for (UInt32 i = 0; i < req->scan_len; i++) {
-				primary_key = (row_id + i) * g_part_cnt + part_id;
-				if (all_keys.find( primary_key ) != all_keys.end() ){
-                    conflict = true;
-				}
-			}
-			if (conflict) {
-			    continue;
-			} else {
-				for (UInt32 i = 0; i < req->scan_len; i++){
-                    all_keys.insert( (row_id + i) * g_part_cnt + part_id);
-				}
+            //row_id = zipf_s.GetNextNumber();
+            if (all_keys.find(req->key) == all_keys.end()) {
+                all_keys.insert(req->key);
+                access_cnt ++;
+            } else {
+                continue;
+            }
 
-				access_cnt += SCAN_LEN;
-			}
+//			for (UInt32 i = 0; i < req->scan_len; i++) {
+//				primary_key = (row_id + i) * g_part_cnt + part_id;
+//				if (all_keys.find( primary_key ) != all_keys.end() ){
+//                    conflict = true;
+//				}
+//			}
+//			if (conflict) {
+//			    continue;
+//			} else {
+//				for (UInt32 i = 0; i < req->scan_len; i++){
+//                    all_keys.insert( (row_id + i) * g_part_cnt + part_id);
+//				}
+//
+//				access_cnt += SCAN_LEN;
+//			}
 		}
 		rid ++;
 	}
