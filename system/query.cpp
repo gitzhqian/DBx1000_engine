@@ -1,4 +1,5 @@
 #include <sched.h>
+#include <algorithm>
 #include "query.h"
 #include "mem_alloc.h"
 #include "wl.h"
@@ -76,13 +77,26 @@ Query_thd::init(workload * h_wl, int thread_id) {
 	queries = (ycsb_query *) 
 		mem_allocator.alloc(sizeof(ycsb_query) * request_cnt, thread_id);
 	srand48_r(thread_id + 1, &buffer);
+
+    //generate insert keys
+    size_t thread_insert_keys = MAX_TXN_PER_PART+4;
+    std::vector<uint64_t> random_insert_keys;
+    uint64_t table_size_ = g_synth_table_size / g_virtual_part_cnt;
+    uint64_t start_key = table_size_ + thread_id*thread_insert_keys;
+    uint64_t end_key = table_size_ + (thread_id+1)*thread_insert_keys;
+    for (int i = start_key; i < end_key; ++i){
+        random_insert_keys.push_back(i + 1);
+    }
+    //random the insert keys
+    std::random_shuffle(random_insert_keys.begin(), random_insert_keys.end());
+    auto size = random_insert_keys.size();
 #elif WORKLOAD == TPCC
 	queries = (tpcc_query *) _mm_malloc(sizeof(tpcc_query) * request_cnt, 64);
 #endif
 	for (UInt32 qid = 0; qid < request_cnt; qid ++) {
 #if WORKLOAD == YCSB	
 		new(&queries[qid]) ycsb_query();
-		queries[qid].init(thread_id, h_wl, this);
+		queries[qid].init(thread_id, h_wl, this, random_insert_keys, qid);
 #elif WORKLOAD == TPCC
 		new(&queries[qid]) tpcc_query();
 		queries[qid].init(thread_id, h_wl);

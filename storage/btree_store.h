@@ -14,8 +14,8 @@
 #include "row_hekaton.h"
 #include "global.h"
 
-constexpr static float MAX_FREEZE_RETRY = 5;
-constexpr static float MAX_INSERT_RETRY = 5;
+constexpr static float MAX_FREEZE_RETRY = 3;//3 4
+constexpr static float MAX_INSERT_RETRY = 6;//6 8
 
 struct ParameterSet {
     uint32_t split_threshold;
@@ -351,6 +351,7 @@ public:
         row_m red_child = this->row_meta[index];
 
         GetRawRow(red_child, nullptr, nullptr, &child_addr);
+//        printf("GetChildByMetaIndex: %u, %lu \n", index, child_addr);
 
         BaseNode *rt_node = reinterpret_cast<BaseNode *> (child_addr);
         return rt_node;
@@ -401,6 +402,7 @@ public:
 
 class LeafNode : public BaseNode {
 public:
+    std::atomic<int> counter_insert = ATOMIC_VAR_INIT(0);
     row_t row_meta[0];
 
     static void New(LeafNode **mem, uint32_t node_size, DramBlockPool *leaf_node_pool);
@@ -551,9 +553,12 @@ public:
         auto record_count = leaf_node->GetHeader()->GetStatus().GetRecordCount();
         for (uint32_t i = 0; i < record_count; ++i) {
             row_t meta = leaf_node->row_meta[i];
-            uint64_t key = *reinterpret_cast<uint64_t *>(meta.primary_key);
-//            printf("leaf node key:%lu \n", key);
-            table_size.insert(key);
+//            if (meta.IsVisible() && !meta.IsInserting()){
+                uint64_t key = *reinterpret_cast<uint64_t *>(meta.primary_key);
+//                printf("leaf node key:%lu \n", key);
+                auto ret = table_size.insert(key);
+            table_size_all.emplace_back(key);
+//            }
         }
     }
     void ScanInnerNode(BaseNode *real_root) {
@@ -564,7 +569,7 @@ public:
             char *ptr = reinterpret_cast<char *>(inner_node) + meta.GetOffset() + meta.GetPaddedKeyLength();
             uint64_t node_addr =  *reinterpret_cast<uint64_t *>(ptr);
             BaseNode *node = reinterpret_cast<BaseNode *>(node_addr);
-            if (node == nullptr) {
+            if (node == NULL) {
                 break;
             } else if (node->IsLeaf()){
                 ScanLeafNode(node);
@@ -584,6 +589,8 @@ public:
         }
     }
     std::set<uint64_t> table_size;
+    std::vector<uint64_t> table_size_all;
+    std::set<uint64_t> table_size_exec;
 
 private:
     ReturnCode Insert(  char *key, uint32_t key_size, char *payload, row_t **inrt_meta);

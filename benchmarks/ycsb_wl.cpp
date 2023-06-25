@@ -123,10 +123,9 @@ void ycsb_wl::init_table_parallel() {
 	mem_allocator.unregister();
 
 
-	the_index->index_store_scan();
-	uint64_t tab_size = the_index->table_size.size();
-	printf("current table index size:%lu \n", tab_size);
-    printf("current table size:%lu \n", the_table->get_table_size());
+//	the_index->index_store_scan();
+//	uint64_t tab_size = the_index->table_size.size();
+//	printf("current table index size:%lu \n", tab_size);
 }
 
 void * ycsb_wl::init_table_slice() {

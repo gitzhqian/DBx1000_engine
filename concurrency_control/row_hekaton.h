@@ -19,7 +19,7 @@ struct WriteHisEntry {
 	ts_t begin;
 	ts_t end;
 	row_t * row;
-//	char distance_[2048]; //for test
+	char distance_[2048]; //for test
 };
 
 #define INF UINT64_MAX

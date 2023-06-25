@@ -108,10 +108,13 @@ RC ycsb_txn_man::run_txn(base_query * query) {
 
                 void *row_insert = nullptr;
                 auto index_ = _wl->the_index;
-                index_->index_insert(primary_key, row_insert, new_row->data);
+                rc = index_->index_insert(primary_key, row_insert, new_row->data);
 #endif
+                if (rc == Abort){
+                    goto final;
+                }
+
                 finish_req = true;
-                //assert(rc == RCOK);
                 continue;
             }
 
@@ -130,7 +133,7 @@ RC ycsb_txn_man::run_txn(base_query * query) {
                 // if scan/update workload
                 row_local = get_row(vd_row, RD);
                 // if scan/insert workload
-                //row_local = reinterpret_cast<row_t *>(vd_row);
+//                row_local = reinterpret_cast<row_t *>(vd_row);
                 if(row_local == NULL || !row_local->valid || row_local->IsInserting()) {
                     iteration ++;
                     if (iteration == req->scan_len){
@@ -204,9 +207,6 @@ RC ycsb_txn_man::run_txn(base_query * query) {
 //                    data = data + KEY_SIZE;
                     __attribute__((unused)) char * value = (&data[tuple_size]);
 #elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
-//                    for (int fid = 0; fid < fild_count; fid++) {
-//                        __attribute__((unused)) char * fid_value = (&data[fid * 10]);
-//                    }
                     __attribute__((unused)) char * value = (&data[tuple_size]);
 #endif
                 } else {
@@ -251,8 +251,16 @@ RC ycsb_txn_man::run_txn(base_query * query) {
 	rc = RCOK;
 
 final:
+
+    //insert for ptr1 and ptr2
+#if ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
+    rc = insert_row_finish(rc);
+#endif
+
     rc = finish(rc);
 
+    //update for ptr0 and ptr2
+#if ENGINE_TYPE == PTR0 || ENGINE_TYPE == PTR2
     if ((!master_latest_val_.empty() || !master_latest_.empty()) && rc == RCOK) {
         #if ENGINE_TYPE == PTR2
             auto sz = master_latest_.size();
@@ -279,6 +287,7 @@ final:
         master_latest_.clear();
         master_latest_val_.clear();
     }
+#endif
 
 	return rc;
 }

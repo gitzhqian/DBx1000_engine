@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "query.h"
 #include "ycsb_query.h"
 #include "mem_alloc.h"
@@ -9,7 +10,7 @@
 uint64_t ycsb_query::the_n = 0;
 double ycsb_query::denom = 0;
 
-void ycsb_query::init(uint64_t thd_id, workload * h_wl, Query_thd * query_thd) {
+void ycsb_query::init(uint64_t thd_id, workload * h_wl, Query_thd * query_thd, std::vector<uint64_t> &insert_keys, UInt32 qid) {
 	_query_thd = query_thd;
 	requests = (ycsb_request *) 
 		mem_allocator.alloc(sizeof(ycsb_request) * g_req_per_query, thd_id);
@@ -18,7 +19,7 @@ void ycsb_query::init(uint64_t thd_id, workload * h_wl, Query_thd * query_thd) {
 	zeta_2_theta = zeta(2, g_zipf_theta);
 	assert(the_n != 0);
 	assert(denom != 0);
-	gen_requests(thd_id, h_wl);
+	gen_requests(thd_id, h_wl, insert_keys, qid);
 }
 
 void 
@@ -57,7 +58,7 @@ uint64_t ycsb_query::zipf(uint64_t n, double theta) {
 	return 1 + (uint64_t)(n * pow(eta*u -eta + 1, alpha));
 }
 
-void ycsb_query::gen_requests(uint64_t thd_id, workload * h_wl) {
+void ycsb_query::gen_requests(uint64_t thd_id, workload * h_wl, std::vector<uint64_t> &insert_keys, UInt32 qid) {
 #if CC_ALG == HSTORE
 	assert(g_virtual_part_cnt == g_part_cnt);
 #endif
@@ -132,7 +133,10 @@ void ycsb_query::gen_requests(uint64_t thd_id, workload * h_wl) {
 			    continue;
 			}
 		} else if(req->rtype == INS){
-            req->key = h_wl->tables["MAIN_TABLE"]->get_next_row_id();
+//            req->key = h_wl->tables["MAIN_TABLE"]->get_next_row_id();
+//            uint64_t insert_k = req->key + h_wl->tables["MAIN_TABLE"]->get_next_row_id();
+            uint64_t insert_k = insert_keys[qid];
+            req->key = insert_k;
             all_keys.insert(req->key);
            // all_keys.insert(row_id);
             access_cnt ++;

@@ -8,7 +8,7 @@
 #if CC_ALG == HEKATON
 
 void Row_hekaton::init(row_t * row) {
-	_his_len = 4;
+	_his_len = 10;
 
 	_write_history = (WriteHisEntry *) _mm_malloc(sizeof(WriteHisEntry) * _his_len, 64);
 	for (uint32_t i = 0; i < _his_len; i++) 
@@ -59,6 +59,8 @@ RC Row_hekaton:: access(txn_man * txn, TsType type, row_t * row) {
 	}
 
 	ts_t ts = txn->get_ts();
+    while (!ATOM_CAS(blatch, false, true))
+      PAUSE
 	if (type == R_REQ) {
 		if (ts < _write_history[_his_oldest].begin) {
 			rc = Abort;
@@ -76,9 +78,11 @@ RC Row_hekaton:: access(txn_man * txn, TsType type, row_t * row) {
 			// ts is between _oldest_wts and _latest_wts, should find the correct version
 			uint32_t i = _his_latest;
 			bool find = false;
-            __builtin_prefetch((reinterpret_cast<char *>(&_write_history[i]) + 5 * CACHE_LINE_SIZE), 0, 3);
+
+            __builtin_prefetch(reinterpret_cast<char *>(&_write_history[i]), 0, 3);
 			while (true) {
 				i = (i == 0)? _his_len - 1 : i - 1;
+                __builtin_prefetch(reinterpret_cast<char *>(&_write_history[i-2]), 0, 3);
 				if (_write_history[i].begin < ts) {
 					assert(_write_history[i].end > ts);
 					txn->cur_row = _write_history[i].row;
@@ -91,8 +95,6 @@ RC Row_hekaton:: access(txn_man * txn, TsType type, row_t * row) {
 			assert(find);
 		}
 	} else if (type == P_REQ) {
-		while (!ATOM_CAS(blatch, false, true))
-			PAUSE
 		if (_exists_prewrite || ts < _write_history[_his_latest].begin) {
 			rc = Abort;
 		} else {

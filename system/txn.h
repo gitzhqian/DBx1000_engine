@@ -96,6 +96,7 @@ public:
 	row_t * 		get_row(void * row, access_t type);
 protected:	
 	void 			insert_row(row_t * row, table_t * table );
+	RC              insert_row_finish(RC rc);
 private:
 	// insert rows
 //	uint64_t 		insert_cnt;
