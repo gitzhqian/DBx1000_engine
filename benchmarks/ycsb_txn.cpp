@@ -115,6 +115,7 @@ RC ycsb_txn_man::run_txn(base_query * query) {
                 }
 
                 finish_req = true;
+                //assert(rc == RCOK);
                 continue;
             }
 
