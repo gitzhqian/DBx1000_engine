@@ -124,6 +124,7 @@ void workload::index_insert(string index_name, uint64_t key, row_t * row) {
 }
 
 void workload::index_insert(INDEX * index, uint64_t key, row_t * row, int64_t part_id) {
+    RC rc;
 	uint64_t pid = part_id;
 	if (part_id == -1)
 		pid = get_part_id(row);
@@ -134,7 +135,21 @@ void workload::index_insert(INDEX * index, uint64_t key, row_t * row, int64_t pa
 	m_item->location = row;
 	m_item->valid = true;
 
-    assert( index->index_insert(key, m_item, pid) == RCOK );
+    row_t * new_row = NULL;
+
+#if ENGINE_TYPE == PTR1
+    rc = index->index_insert(key, row, pid);
+#elif ENGINE_TYPE == PTR2
+    rc = index->index_insert(key, m_item, pid);
+#elif ENGINE_TYPE == PTR0
+    void *row_item;
+    rc = index->index_insert(key, row_item, row->data );
+    new_row = reinterpret_cast<row_t *>(row_item);
+#endif
+
+
+//	rc = index->index_insert(key, m_item, pid);
+    assert( rc == RCOK );
 }
 
 

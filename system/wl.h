@@ -20,9 +20,12 @@ class workload
 {
 public:
 	// tables indexed by table name
-	map<string, table_t *> tables;
-	map<string, INDEX *> indexes;
+    std::map<string, table_t *> tables;
+    std::map<string, INDEX *> indexes;
 
+    table_t *tables_[32];
+    INDEX *indexes_[32]; // 32 indexes at most
+    int index_2_table_[32];
 	
 	// initialize the tables and indexes.
 	virtual RC init();

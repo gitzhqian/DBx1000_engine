@@ -91,9 +91,14 @@ public:
 
 	// For VLL
 	TxnType 		vll_txn_type;
+    row_t*          search(INDEX* index, size_t key, int part_id, access_t type);
 	void *		    index_read(INDEX * index, idx_key_t key, int part_id);
 	void 			index_read(INDEX * index, idx_key_t key, int part_id, void *& item);
 	row_t * 		get_row(void * row, access_t type);
+    bool            insert_row_to_table(row_t * row, table_t * table, int part_id,
+                                      uint64_t& out_row_id) ;
+    bool            insert_row_to_index(INDEX* index, idx_key_t ins_key, row_t* row,
+                                      int part_id) ;
 protected:	
 	void 			insert_row(row_t * row, table_t * table );
 	RC              insert_row_finish(RC rc);

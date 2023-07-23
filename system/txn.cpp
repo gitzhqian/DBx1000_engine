@@ -119,6 +119,14 @@ void txn_man::cleanup(RC rc) {
 	dl_detector.clear_dep(get_txn_id());
 #endif
 }
+row_t* txn_man::search(INDEX* index, idx_key_t key, int part_id,
+                       access_t type) {
+    void* row;
+    row = index_read(index, key,part_id);
+    if (row == NULL) return NULL;
+
+    return get_row(row, type);
+}
 
 row_t * txn_man::get_row(void * row_v, access_t type) {
 	if (CC_ALG == HSTORE)
@@ -193,6 +201,48 @@ void txn_man::insert_row(row_t * row, table_t * table) {
 	insert_rows[insert_cnt++] = row;
 }
 
+bool txn_man::insert_row_to_table(row_t * row, table_t * table, int part_id,
+                                uint64_t& out_row_id) {
+    assert(CC_ALG == HEKATON);
+    if (table->get_new_row(row, part_id, out_row_id) != RCOK) return false;
+//    assert(insert_cnt < MAX_ROW_PER_TXN);
+//    insert_rows[insert_cnt++] = row;
+
+    return true;
+}
+bool txn_man::insert_row_to_index(INDEX* index, idx_key_t ins_key, row_t* row,
+                         int part_id) {
+    RC rc = RCOK;
+    row_t *ins_row = row;
+    idx_key_t key = ins_key;
+    void *row_item = nullptr;
+
+#if ENGINE_TYPE == PTR1
+    uint64_t new_row_addr = reinterpret_cast<uint64_t>(ins_row);
+    char *data_ = reinterpret_cast<char *>(&new_row_addr);
+    rc = index->index_insert(key, row_item, data_);
+#elif ENGINE_TYPE == PTR2
+    itemid_t * m_item =
+        (itemid_t *) mem_allocator.alloc( sizeof(itemid_t), ins_row->get_part_id());
+    assert(m_item != NULL);
+    m_item->type = DT_row;
+    m_item->valid = true;
+    m_item->location = ins_row;
+    uint64_t new_row_addr = reinterpret_cast<uint64_t>(m_item);
+    char *data_ = reinterpret_cast<char *>(&new_row_addr);
+    rc = index_->index_insert(key, row_item, data_);
+#elif ENGINE_TYPE == PTR0
+    void *row_insert = nullptr;
+    rc = index->index_insert(key, row_insert, ins_row->data);
+#endif
+
+    if (rc == RCOK){
+        return true;
+    }else{
+        return false;
+    }
+}
+
 RC txn_man::insert_row_finish(RC rc){
     //insert index
 #if ENGINE_TYPE != PTR0
@@ -239,13 +289,11 @@ RC txn_man::insert_row_finish(RC rc){
     return rc;
 }
 
-void *
-txn_man::index_read(INDEX * index, idx_key_t key, int part_id) {
+void *txn_man::index_read(INDEX * index, idx_key_t key, int part_id) {
 	uint64_t starttime = get_sys_clock();
 	void * item;
 	auto rc = index->index_read(key, item, part_id, get_thd_id());
 	if (rc != RCOK){
-//        printf("btree read fail, there is no record , txn.cpp,  key: %zu \n", key);
 	    item = NULL;
 	}
     INC_TMP_STATS(get_thd_id(), time_index, get_sys_clock() - starttime);
@@ -253,8 +301,7 @@ txn_man::index_read(INDEX * index, idx_key_t key, int part_id) {
 	return item;
 }
 
-void 
-txn_man::index_read(INDEX * index, idx_key_t key, int part_id, void *& item) {
+void txn_man::index_read(INDEX * index, idx_key_t key, int part_id, void *& item) {
 	uint64_t starttime = get_sys_clock();
 	index->index_read(key, item, part_id, get_thd_id());
 	INC_TMP_STATS(get_thd_id(), time_index, get_sys_clock() - starttime);
