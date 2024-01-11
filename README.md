@@ -1,10 +1,10 @@
-<img src="logo/dbx1000.svg" alt="DBx1000 Logo" width="60%">
+HDBMS
 
 -----------------
 
-DBx1000 is a single node OLTP database management system (DBMS). The goal of DBx1000 is to make DBMS scalable on future 1000-core processors. We implemented all the seven classic concurrency control schemes in DBx1000. They exhibit different scalability properties under different workloads. 
+HDBMS is a testbed of an OLTP distributed database management system (DBMS). It supports 6 concurrency control algorithms.
 
-The concurrency control scalability study is described in the following paper. 
+This testbed is based on the DBx1000 system, whose concurrency control scalability study can be found in the following paper:
 
 [1] Xiangyao Yu, George Bezerra, Andrew Pavlo, Srinivas Devadas, Michael Stonebraker, [Staring into the Abyss: An Evaluation of Concurrency Control with One Thousand Cores](http://www.vldb.org/pvldb/vol8/p209-yu.pdf), VLDB 2014
     
@@ -34,7 +34,7 @@ DBMS configurations can be changed in the config.h file. Please refer to README 
                         
 Configurations can also be specified as command argument at runtime. Run the following command for a full list of program argument. 
     
-    ./rundb -h
+    ./rundb -g 
 
 Run
 ---
@@ -58,22 +58,4 @@ time_abort: The time spent on transaction executions that eventually aborted.
 
 latency: Average latency of transactions.
 
-
-Branches and Other Related Systems
-----------------------------------
-
-DBx1000 currently contains two branches: 
-
-1. The master branch focuses on implementations of different concurrency control protocols described [1]. The master branch also contains the implementation of TicToc [2]
-
-[2] Xiangyao Yu, Andrew Pavlo, Daniel Sanchez, Srinivas Devadas, [TicToc: Time Traveling Optimistic Concurrency Control](https://dl.acm.org/doi/abs/10.1145/2882903.2882935), SIGMOD 2016
-
-
-2. The logging branch implements the Taurus logging protocol as described the [3]. The logging branch is a mirror of https://github.com/yuxiamit/DBx1000_logging.
-    
-[3] Yu Xia, Xiangyao Yu, Andrew Pavlo, Srinivas Devadas, [Taurus: Lightweight Parallel Logging for In-Memory Database Management Systems](http://vldb.org/pvldb/vol14/p189-xia.pdf), VLDB 2020
-
-The following two distributed DBMS testbeds have been developed based on DBx1000
-
-1. Deneva: https://github.com/mitdbg/deneva
-2. Sundial: https://github.com/yxymit/Sundial    
+ 
