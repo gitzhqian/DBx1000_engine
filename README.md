@@ -1,7 +1,7 @@
 HDBMS
 -----------------
 
-HDBMS is a testbed of different storage layouts.
+HDBMS is a testbed for different storage layouts.
 
 This testbed is based on the DBx1000 system, whose concurrency control scalability study can be found in the following paper:
 
