@@ -21,7 +21,7 @@ int ycsb_wl::next_tid;
 RC ycsb_wl::init() {
 	workload::init();
 	next_tid = 0;
-	string path = "/home/zhangqian/code/DBx1000_engine/benchmarks/YCSB_schema.txt";
+	string path = "/home/zhangqian/papers/hdbms/HDBMSengine/benchmarks/YCSB_schema.txt";
     //string path = "/home/zq/DBx1000_engine_ptr/DBx1000_engine/benchmarks/YCSB_schema.txt";
 
 	init_schema( path );
@@ -90,7 +90,7 @@ RC ycsb_wl::init_table() {
 
 #if ENGINE_TYPE == PTR0
             void *row_item;
-            rc = the_index->index_insert(primary_key, row_item, new_row->data );
+            rc = the_index->index_insert(primary_key, row_item, new_row->data,0 );
             new_row = reinterpret_cast<row_t *>(row_item);
 
 #endif
@@ -139,7 +139,7 @@ void * ycsb_wl::init_table_slice() {
 	assert(tid < g_init_parallelism);
 	while ((UInt32)ATOM_FETCH_ADD(next_tid, 0) < g_init_parallelism) {}
 	assert((UInt32)ATOM_FETCH_ADD(next_tid, 0) == g_init_parallelism);
-	double slice_size = (double)g_synth_table_size / (double)g_init_parallelism;
+	double slice_size = (double) g_synth_table_size / (double)g_init_parallelism;
     auto tuple_size = the_table->schema->tuple_size;
     char *data;
 	for (uint64_t key = ceil(slice_size * tid);
@@ -147,21 +147,21 @@ void * ycsb_wl::init_table_slice() {
 		row_t * new_row = NULL;
 
 #if ENGINE_TYPE == PTR0
-        tuple_size = PAYLOAD_SIZE;
+        tuple_size = tuple_size;
         idx_key_t key_insr = key;
         data = new char[tuple_size];
         for (int fid = 0; fid < tuple_size; fid ++) {
            data[fid] = 'h';
         }
         void *row_item;
-        this->the_table->get_next_row_id();
+        auto row_id = this->the_table->get_next_row_id();
 
         retry_insrt:
-        rc = the_index->index_insert(key_insr, row_item, data);
+        rc = the_index->index_insert(key_insr, row_item, data, row_id);
 
         if (rc==RCOK){
             new_row = reinterpret_cast<row_t *>(row_item);
-            auto insrt_lock = ATOM_CAS(new_row->valid, false, true);
+            auto insrt_lock = ATOM_CAS(new_row->is_valid, VALID, VALID);
             M_ASSERT(insrt_lock, "insert a row_t, mark txn valid, locking failure.");
         }
 
@@ -177,7 +177,7 @@ void * ycsb_wl::init_table_slice() {
 		uint64_t primary_key = key;
 		new_row->set_primary_key(primary_key);
 		new_row->set_value(0, &primary_key);
-		new_row->valid = true;
+		new_row->is_valid = VALID;
 		Catalog * schema = the_table->get_schema();
 
         auto fid_size = schema->get_field_size(0);
@@ -208,11 +208,11 @@ void * ycsb_wl::init_table_slice() {
 //            rc = the_index->index_insert(idx_key, m_item, part_id);
             uint64_t new_row_addr = reinterpret_cast<uint64_t>(m_item);
             char *data = reinterpret_cast<char *>(&new_row_addr);
-            rc = the_index->index_insert(idx_key, row_item, data);
+            rc = the_index->index_insert(idx_key, row_item, data, row_id);
 #endif
         if (rc==RCOK){
             new_row = reinterpret_cast<row_t *>(row_item);
-            auto insrt_lock = ATOM_CAS(new_row->valid, false, true);
+            auto insrt_lock = ATOM_CAS(new_row->is_valid, VALID, VALID);
             M_ASSERT(insrt_lock, "insert a row_t, mark txn valid, locking failure.");
         }
 

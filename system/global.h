@@ -102,12 +102,18 @@ extern double g_scan_perc;
 extern double g_zipf_theta;
 extern UInt64 g_synth_table_size;
 extern UInt32 g_req_per_query;
+extern UInt32 g_req_per_query_ap;
 extern UInt32 g_field_per_tuple;
 extern UInt32 g_init_parallelism;
 
 // TPCC
 extern UInt32 g_num_wh;
 extern double g_perc_payment;
+extern double g_perc_stocklevel;
+extern double g_perc_neworder;
+extern double g_perc_query_2;
+extern double g_perc_orderstatus;
+extern double g_perc_delivery;
 extern bool g_wh_update;
 extern char * output_file;
 extern UInt32 g_max_items;
@@ -115,6 +121,8 @@ extern UInt32 g_cust_per_dist;
 extern uint64_t g_max_orderline;
 
 enum RC { RCOK, Commit, Abort, WAIT, ERROR, FINISH, Update};
+
+enum row_ops{ INVALID, INSERTING, VALID, DELETE};
 
 /* Thread */
 typedef uint64_t txnid_t;
@@ -138,7 +146,7 @@ typedef uint64_t (*func_ptr)(idx_key_t);	// part_id func_ptr(index_key);
 /* general concurrency control */
 enum access_t {RD, WR, XP, SCAN, RO, INS};
 /* LOCK */
-enum lock_t {LOCK_EX, LOCK_SH, LOCK_NONE };
+enum lock_t {LOCK_EX, LOCK_SH, LOCK_NONE};
 /* TIMESTAMP */
 enum TsType {R_REQ, W_REQ, P_REQ, XP_REQ, O_REQ, S_REQ};
 

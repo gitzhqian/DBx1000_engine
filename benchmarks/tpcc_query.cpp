@@ -8,14 +8,39 @@
 
 void tpcc_query::init(uint64_t thd_id, workload * h_wl) {
 	double x = (double)(rand() % 100) / 100.0;
-	part_to_access = (uint64_t *) 
-		mem_allocator.alloc(sizeof(uint64_t) * g_part_cnt, thd_id);
-	if (x < g_perc_payment)
-		gen_payment(thd_id);
-	else 
-		gen_new_order(thd_id);
-}
+	part_to_access = (uint64_t *)  mem_allocator.alloc(sizeof(uint64_t) * g_part_cnt, thd_id);
+#if !TPCC_FULL
+    if (x < g_perc_payment)
+    gen_payment(thd_id);
+  else
+    gen_new_order(thd_id);
+#else
 
+#if OLAP_ENABLE == true
+    if (thd_id == (g_thread_cnt - 1)){
+        gen_query2(thd_id);
+    }else{
+#endif
+       if (x < g_perc_delivery  ){
+            gen_delivery(thd_id);
+        } else if (x < g_perc_delivery + g_perc_orderstatus){
+            gen_order_status(thd_id);
+        } else if (x < g_perc_delivery + g_perc_stocklevel + g_perc_orderstatus ){
+            gen_stock_level(thd_id);
+        }else if (x < g_perc_delivery + g_perc_stocklevel + g_perc_orderstatus  +g_perc_payment){
+            gen_payment(thd_id);
+        } else {
+            gen_new_order(thd_id);
+        }
+#if OLAP_ENABLE == true
+    }
+#endif
+
+#endif
+}
+void tpcc_query::gen_query2(uint64_t thd_id) {
+    type = TPCC_QUERY2;
+}
 void tpcc_query::gen_payment(uint64_t thd_id) {
 	type = TPCC_PAYMENT;
 	if (FIRST_PART_LOCAL)
@@ -49,15 +74,15 @@ void tpcc_query::gen_payment(uint64_t thd_id) {
 		} else 
 			c_w_id = w_id;
 	}
-	if(y <= 60) {
-		// by last name
-		by_last_name = true;
-		Lastname(NURand(255,0,999,w_id-1),c_last);
-	} else {
+//	if(y <= 60) {
+//		// by last name
+//		by_last_name = true;
+//		Lastname(NURand(255,0,999,w_id-1),c_last);
+//	} else {
 		// by cust id
 		by_last_name = false;
 		c_id = NURand(1023, 1, g_cust_per_dist,w_id-1);
-	}
+//	}
 }
 
 void tpcc_query::gen_new_order(uint64_t thd_id) {
@@ -123,13 +148,50 @@ tpcc_query::gen_order_status(uint64_t thd_id) {
 	c_w_id = w_id;
 	c_d_id = d_id;
 	int y = URand(1, 100, w_id-1);
-	if(y <= 60) {
-		// by last name
-		by_last_name = true;
-		Lastname(NURand(255,0,999,w_id-1),c_last);
-	} else {
+//	if(y <= 60) {
+//		// by last name
+//		by_last_name = true;
+//		Lastname(NURand(255,0,999,w_id-1),c_last);
+//	} else {
 		// by cust id
 		by_last_name = false;
 		c_id = NURand(1023, 1, g_cust_per_dist, w_id-1);
-	}
+//	}
+}
+void tpcc_query::gen_delivery(uint64_t thd_id) {
+    type = TPCC_DELIVERY;
+
+    if (FIRST_PART_LOCAL) {
+        if (g_num_wh <= g_thread_cnt)
+            w_id = thd_id % g_num_wh + 1;
+        else {
+            do {
+                w_id = RAND((g_num_wh + g_thread_cnt - 1) / g_thread_cnt, thd_id) * g_thread_cnt + thd_id + 1;
+            } while (w_id > g_num_wh);
+            assert((w_id - 1) % g_thread_cnt == thd_id);
+        }
+    } else
+        w_id = URand(1, g_num_wh, thd_id);
+    o_carrier_id = URand(1, DIST_PER_WARE, thd_id);
+    ol_delivery_d = 2013;
+    n_o_id = URand(2101,3000,thd_id);
+}
+void tpcc_query::gen_stock_level(uint64_t thd_id) {
+    type = TPCC_STOCK_LEVEL;
+
+    if (FIRST_PART_LOCAL) {
+        if (g_num_wh <= g_thread_cnt)
+            w_id = thd_id % g_num_wh + 1;
+        else {
+            do {
+                w_id = RAND((g_num_wh + g_thread_cnt - 1) / g_thread_cnt, thd_id) *
+                           g_thread_cnt + thd_id + 1;
+            } while (w_id > g_num_wh);
+            assert((w_id - 1) % g_thread_cnt == thd_id);
+        }
+    } else
+        w_id = URand(1, g_num_wh, thd_id);
+    d_id = URand(1, DIST_PER_WARE, thd_id);
+    threshold = URand(10, 20, thd_id);
+    n_o_id = URand(1,3000,thd_id);
 }

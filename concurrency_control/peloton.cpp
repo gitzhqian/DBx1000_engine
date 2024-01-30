@@ -1,12 +1,12 @@
 #include "txn.h"
 #include "row.h"
-#include "row_hekaton.h"
+#include "row_peloton.h"
 #include "manager.h"
 
-#if CC_ALG==HEKATON
+#if CC_ALG==PELOTON
 
 RC
-txn_man::validate_hekaton(RC rc)
+txn_man::validate_peloton(RC rc)
 {
 	uint64_t starttime = get_sys_clock();
 	INC_STATS(get_thd_id(), debug1, get_sys_clock() - starttime);
@@ -28,7 +28,7 @@ txn_man::validate_hekaton(RC rc)
 		if (accesses[rid]->type == RD || accesses[rid]->type == RO || accesses[rid]->type == SCAN || accesses[rid]->type == INS){
             continue;
 		}
-		accesses[rid]->orig_row->manager->post_process(this, commit_ts, accesses[rid]->read_addr, rc);
+		accesses[rid]->orig_row->manager->post_process(this, commit_ts, rc );
 	}
 	return rc;
 }

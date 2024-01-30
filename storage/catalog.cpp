@@ -4,10 +4,11 @@
 
 void 
 Catalog::init(const char * table_name, int field_cnt) {
-	this->table_name = table_name;
+	this->table_name = strdup(table_name);
 	this->field_cnt = 0;
 	this->_columns = new Column [field_cnt];
 	this->tuple_size = 0;
+
 }
 
 void Catalog::add_col(char * col_name, uint64_t size, char * type) {

@@ -43,3 +43,17 @@ private:
 	int _abort_buffer_empty_slots;
 	bool _abort_buffer_enable;
 };
+class threade_t{
+public:
+    uint64_t _thd_id;
+    static threade_t& GetInstance() {
+        static threade_t epoch_ins;
+        return epoch_ins;
+    }
+    void stop(){
+        is_running_ = false;
+    }
+   void run();
+
+   bool is_running_;
+};

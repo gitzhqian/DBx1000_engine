@@ -10,7 +10,7 @@ class table_t;
 class base_query;
 class INDEX;
 
-// each thread has a txn_man. 
+// each thread has a txn_man.
 // a txn_man corresponds to a single transaction.
 
 //For VLL
@@ -30,7 +30,13 @@ public:
 	ts_t 		tid;
 	ts_t 		epoch;
 #elif CC_ALG == HEKATON
-	void * 		history_entry;	
+	void * 		history_entry;
+	ts_t        read_latest_begin;
+	uint64_t    read_addr;
+#elif CC_ALG == PELOTON
+	void *      _write_list_header;
+	ts_t        read_latest_begin;
+    uint64_t    read_addr;
 #endif
 
 };
@@ -56,14 +62,18 @@ public:
 
 	pthread_mutex_t txn_lock;
 	row_t * volatile cur_row;
+	uint64_t         cur_addr;
+    ts_t   volatile  read_latest_begin;
 #if CC_ALG == HEKATON
 	void * volatile history_entry;
+#elif CC_ALG == PELOTON
+    void * volatile write_list_header;
 #endif
 	// [DL_DETECT, NO_WAIT, WAIT_DIE]
 	bool volatile 	lock_ready;
 	bool volatile 	lock_abort; // forces another waiting txn to abort.
 	// [TIMESTAMP, MVCC]
-	bool volatile 	ts_ready; 
+	bool volatile 	ts_ready;
 	// [HSTORE]
 	int volatile 	ready_part;
 	RC 				finish(RC rc);
@@ -76,7 +86,7 @@ public:
 #elif CC_ALG == SILO
 	ts_t 			last_tid;
 #endif
-	
+
 	// For OCC
 	uint64_t 		start_ts;
 	uint64_t 		end_ts;
@@ -91,15 +101,17 @@ public:
 
 	// For VLL
 	TxnType 		vll_txn_type;
+    int            index_read_range(INDEX * index, idx_key_t key, idx_key_t max_key,
+                                   std::vector<row_t *> **items, int count, int part_id) ;
     row_t*          search(INDEX* index, size_t key, int part_id, access_t type);
 	void *		    index_read(INDEX * index, idx_key_t key, int part_id);
 	void 			index_read(INDEX * index, idx_key_t key, int part_id, void *& item);
 	row_t * 		get_row(void * row, access_t type);
-    bool            insert_row_to_table(row_t * row, table_t * table, int part_id,
+    bool            insert_row_to_table(row_t *& row, table_t * table, int part_id,
                                       uint64_t& out_row_id) ;
     bool            insert_row_to_index(INDEX* index, idx_key_t ins_key, row_t* row,
                                       int part_id) ;
-protected:	
+protected:
 	void 			insert_row(row_t * row, table_t * table );
 	RC              insert_row_finish(RC rc);
 private:
@@ -124,5 +136,7 @@ private:
 	RC				validate_silo();
 #elif CC_ALG == HEKATON
 	RC 				validate_hekaton(RC rc);
+#elif CC_ALG == PELOTON
+    RC              validate_peloton(RC rc);
 #endif
 };

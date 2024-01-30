@@ -6,6 +6,7 @@
 #include "global.h"
 #include "helper.h"
 
+
 class ycsb_query;
 
 class ycsb_wl : public workload {
@@ -17,6 +18,8 @@ public :
 	int key_to_part(uint64_t key);
 	INDEX * the_index;
 	table_t * the_table;
+
+
 private:
 	void init_table_parallel();
 	void * init_table_slice();
@@ -27,6 +30,7 @@ private:
 	pthread_mutex_t insert_lock;
 	//  For parallel initialization
 	static int next_tid;
+
 };
 
 class ycsb_txn_man : public txn_man

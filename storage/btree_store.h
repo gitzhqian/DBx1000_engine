@@ -12,7 +12,9 @@
 #include "row.h"
 #include "table.h"
 #include "row_hekaton.h"
+#include "catalog.h"
 #include "global.h"
+#include "mem_alloc.h"
 
 constexpr static float MAX_FREEZE_RETRY = 3;//3 4
 constexpr static float MAX_INSERT_RETRY = 6;//6 8
@@ -23,16 +25,19 @@ struct ParameterSet {
     uint32_t leaf_node_size;
     uint32_t payload_size;
     uint32_t key_size;
+    table_t  *idx_table;
 
     ParameterSet() : split_threshold(3072), merge_threshold(1024),
-                     leaf_node_size(4096), payload_size(8), key_size(8) {}
+                     leaf_node_size(4096), payload_size(8), key_size(8),
+                     idx_table (nullptr){}
 
     ParameterSet(uint32_t split_threshold_, uint32_t merge_threshold_,
-                 uint32_t leaf_node_size_,  uint32_t payload_size_, uint32_t key_size_)
+                 uint32_t leaf_node_size_,  uint32_t payload_size_,
+                 uint32_t key_size_, table_t *table_)
             : split_threshold(split_threshold_),
               merge_threshold(merge_threshold_),
               leaf_node_size(leaf_node_size_), payload_size(payload_size_),
-              key_size(key_size_){}
+              key_size(key_size_), idx_table (table_) {}
 
     ~ParameterSet()  = default;
 };
@@ -172,7 +177,6 @@ public:
     bool is_leaf;
     NodeHeader header;
 
-
     static const inline int KeyCompare(const char *key1, uint32_t size1,
                                        const char *key2, uint32_t size2) {
         if (!key1) {
@@ -183,14 +187,14 @@ public:
         int cmp;
 
         size_t min_size = std::min<size_t>(size1, size2);
-        if (min_size < 16) {
-            cmp = my_memcmp(key1, key2, min_size);
-        } else {
+//        if (min_size < 16) {
+//            cmp = my_memcmp(key1, key2, min_size);
+//        } else {
             cmp = memcmp(key1, key2, min_size);
-        }
-        if (cmp == 0) {
-            return size1 - size2;
-        }
+//        }
+//        if (cmp == 0) {
+//            return size1 - size2;
+//        }
         return cmp;
     }
     static const inline int my_memcmp(const char *key1, const char *key2, uint32_t size) {
@@ -402,7 +406,7 @@ public:
 
 class LeafNode : public BaseNode {
 public:
-    std::atomic<int> counter_insert = ATOMIC_VAR_INIT(0);
+//    std::atomic<int> counter_insert = ATOMIC_VAR_INIT(0);
     row_t row_meta[0];
 
     static void New(LeafNode **mem, uint32_t node_size, DramBlockPool *leaf_node_pool);
@@ -422,8 +426,7 @@ public:
     ReturnCode Insert(char * key, uint16_t key_size,
                       char *payload, uint32_t payload_size,
                       row_t **meta,
-                      uint32_t split_threshold ,
-                      DualPointer **dural_pointer);
+                      uint32_t split_threshold, table_t *table_, uint64_t row_id);
 
     ReturnCode Read(char * key, uint16_t key_size, row_t **meta );
 
@@ -521,7 +524,7 @@ public:
     RC  index_insert(idx_key_t key, void * item, int part_id=-1 ){ return RCOK;}
     bool index_exist(idx_key_t key) {return true;}
 
-    RC  index_insert(idx_key_t key, void * &item, char *payload);
+    RC  index_insert(idx_key_t key, void * &item, char *payload, uint64_t row_id);
     int index_scan(idx_key_t key, int range, void** output);
     RC	index_read(idx_key_t key, void * &item);
     RC	index_read(idx_key_t key, void * &item, int part_id = -1);
@@ -529,21 +532,44 @@ public:
 
     void init_btree_store(uint32_t key_size, table_t * table_){
         ParameterSet param(SPLIT_THRESHOLD, MERGE_THRESHOLD,
-                           DRAM_BLOCK_SIZE,
-                           PAYLOAD_SIZE, key_size);
+                           DRAM_BLOCK_SIZE, 8, 8, table_);
+        string table_name = table_->get_table_name();
+#if ENGINE_TYPE == PTR0
+        if (table_name == "WAREHOUSE"){
+            param.leaf_node_size = WAREHOUSE_BLOCK_SIZE;
+        } else if (table_name == "DISTRICT"){
+            param.leaf_node_size = DISTRICT_BLOCK_SIZE;
+        }else if (table_name == "CUSTOMER"){
+            param.leaf_node_size = CUSTOMER_BLOCK_SIZE;
+        }else if (table_name == "NEW-ORDER"){
+            param.leaf_node_size = NEW_ORDER_BLOCK_SIZE;
+        }else if (table_name == "ORDER"){
+            param.leaf_node_size = ORDER_BLOCK_SIZE;
+        }else if (table_name == "ORDER-LINE"){
+            param.leaf_node_size = ORDER_LINE_BLOCK_SIZE;
+        }else if (table_name == "ITEM"){
+            param.leaf_node_size = ITEM_BLOCK_SIZE;
+        }else if (table_name == "STOCK"){
+            param.leaf_node_size = STOCK_BLOCK_SIZE;
+        }else if (table_name == "MAIN_TABLE"){
+            param.leaf_node_size = MAIN_TABLE_BLOCK_SIZE;
+        }
+        param.payload_size = table_->get_schema()->get_tuple_size();
+#endif
+
         //for leaf node
         auto leaf_node_pool_ = new DramBlockPool(DEFAULT_BLOCKS, DEFAULT_BLOCKS);
         //for inner node
         RecordBufferPool *pool_ = new RecordBufferPool(500000000,500000000);
         auto inner_node_pool_ = new InnerNodeBuffer(pool_);
 
-        init_btree_store(param, key_size, table_, leaf_node_pool_, inner_node_pool_);
+        init_btree_store(param, 8, table_, leaf_node_pool_, inner_node_pool_);
     }
     void init_btree_store(ParameterSet param, uint32_t key_size, table_t *table_,
                                 DramBlockPool *leaf_node, InnerNodeBuffer *inner_node);
     LeafNode *TraverseToLeaf(Stack *stack, char * key, uint16_t key_size,
                                                                 bool le_child = true);
-    inline std::unique_ptr<Iterator> RangeScanBySize(  char * key1, uint16_t size1,
+    inline std::unique_ptr<Iterator> RangeScanBySize(char *  key1, uint16_t size1,
                                                                 uint32_t scan_size) {
         return tbb::internal::make_unique<Iterator>(this, key1, size1, scan_size);
     }
@@ -554,7 +580,7 @@ public:
         for (uint32_t i = 0; i < record_count; ++i) {
             row_t meta = leaf_node->row_meta[i];
 //            if (meta.IsVisible() && !meta.IsInserting()){
-                uint64_t key = *reinterpret_cast<uint64_t *>(meta.primary_key);
+                uint64_t key = meta._primary_key;
 //                printf("leaf node key:%lu \n", key);
                 auto ret = table_size.insert(key);
             table_size_all.emplace_back(key);
@@ -580,25 +606,25 @@ public:
     }
 
     void index_store_scan(){
-        auto real_root = this->GetRootNodeSafe();
-
-        if (real_root->IsLeaf()){
-            ScanLeafNode(real_root);
-        }else{
-            ScanInnerNode(real_root);
-        }
+//        auto real_root = this->GetRootNodeSafe();
+//
+//        if (real_root->IsLeaf()){
+//            ScanLeafNode(real_root);
+//        }else{
+//            ScanInnerNode(real_root);
+//        }
     }
     std::set<uint64_t> table_size;
     std::vector<uint64_t> table_size_all;
     std::set<uint64_t> table_size_exec;
 
 private:
-    ReturnCode Insert(  char *key, uint32_t key_size, char *payload, row_t **inrt_meta);
-    int Scan(  char * start_key, uint32_t key_size , uint32_t range, void **output);
+    ReturnCode Insert(  char *key, uint32_t key_size, char *payload, row_t **inrt_meta, uint64_t row_id);
+    int Scan(  char * start_key, uint32_t key_size , uint32_t range, std::vector<row_t *> **output);
 
     bool ChangeRoot(uint64_t expected_root_addr, uint64_t new_root_addr);
-    uint32_t AddDefaultRowDualPointerArray();
-    void RowDualPointer(DualPointer **dual_ptr);
+//    uint32_t AddDefaultRowDualPointerArray();
+//    void RowDualPointer(DualPointer **dual_ptr);
     inline BaseNode *GetRootNodeSafe() {
         auto root_node = root;
         return reinterpret_cast<BaseNode *>(root_node);
@@ -613,10 +639,14 @@ private:
 
 class Iterator {
 public:
-    explicit Iterator(index_btree_store *tree,    char * begin_key, uint16_t begin_size, uint32_t scan_size ) :
+    explicit Iterator(index_btree_store *tree,  char *  begin_key, uint16_t begin_size, uint32_t scan_size ) :
             key(begin_key), key_size(begin_size), tree(tree), remaining_size(scan_size) {
-        node = this->tree->TraverseToLeaf(nullptr, begin_key, begin_size);
-        if (node == nullptr) return ;
+        node = tree->TraverseToLeaf(nullptr, begin_key, begin_size);
+        item_vec.clear();
+        if (node == nullptr){
+            itr_empty = true;
+            return  ;
+        }
         node->RangeScanBySize(begin_key, begin_size,  scan_size, &item_vec);
     }
 
@@ -627,32 +657,33 @@ public:
      * @return
      */
     inline row_t *GetNext() {
-        if (item_vec.empty() || remaining_size == 0) {
+        if (item_vec.front() == nullptr ||
+                  item_vec.empty() || remaining_size == 0) {
             return nullptr;
         }
 
         remaining_size -= 1;
         // we have more than one record
         if (item_vec.size() > 1) {
-            auto front = std::move(item_vec.front());
+            auto front = item_vec.front();
             item_vec.pop_front();
             return front;
         }
 
+//        printf("item vec size:%lu, \n",item_vec.size());
         // there's only one record in the vector
-        auto last_record = std::move(item_vec.front());
+        auto last_record = item_vec.front();
         item_vec.pop_front();
 
-        node = this->tree->TraverseToLeaf(nullptr,
-                                          reinterpret_cast<char *>(last_record->primary_key),
-                                          key_size,
-                                          false);
+        node = tree->TraverseToLeaf(nullptr,
+                                     reinterpret_cast<char *>(&(last_record->_primary_key)),
+                                     key_size, false);
         if (node == nullptr) {
             return nullptr;
         }
+
         item_vec.clear();
-//        char *last_key = last_record->data;
-        char *last_key = reinterpret_cast<char *>(last_record->primary_key);
+        idx_key_t last_key = last_record->_primary_key;
         uint32_t last_len = key_size;
 
 //        auto count = node->GetHeader()->status.GetRecordCount();
@@ -662,16 +693,15 @@ public:
 //            __builtin_prefetch((const void *) ((char *) node + i * CACHE_LINE_SIZE), 0, 3);
 //        }
 
-        node->RangeScanBySize(last_key, last_len, remaining_size, &item_vec);
+        node->RangeScanBySize(reinterpret_cast<char *>(&last_key), last_len, remaining_size, &item_vec);
 
         // should fix traverse to leaf instead
         // check if we hit the same record
         if (!item_vec.empty()) {
             auto new_front = item_vec.front();
-//            uint64_t n = *reinterpret_cast<char *>(new_front->primary_key);
-//            uint64_t l = *reinterpret_cast<char *>(last_record->primary_key);
-            if (BaseNode::KeyCompare(reinterpret_cast<char *>(new_front->primary_key), key_size,
-                                     reinterpret_cast<char *>(last_record->primary_key), key_size) == 0) {
+            char *k1 = reinterpret_cast<char *>(&(new_front->_primary_key));
+            char *k2 = reinterpret_cast<char *>(&(last_record->_primary_key));
+            if (BaseNode::KeyCompare(k1, key_size, k2, key_size) == 0) {
                 item_vec.clear();
                 return last_record;
             }
@@ -679,14 +709,18 @@ public:
         return last_record;
     }
 
+    bool is_empty(){
+        return itr_empty;
+    }
 
 private:
-    char * key;
+    char *key;
     uint32_t key_size;
     uint32_t remaining_size;
     index_btree_store *tree;
     LeafNode *node;
-    std::list<row_t *> item_vec;
+    bool itr_empty = false;
+    std::list<row_t *> item_vec ;
 };
 
 #endif

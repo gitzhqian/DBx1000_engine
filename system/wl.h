@@ -2,6 +2,10 @@
 
 #include "global.h"
 #include "thread.h"
+
+#define TBB_PREVIEW_CONCURRENT_ORDERED_CONTAINERS 1
+#include "tbb/concurrent_set.h"
+
 class row_t;
 class table_t;
 class IndexHash;
@@ -21,7 +25,10 @@ class workload
 public:
 	// tables indexed by table name
     std::map<string, table_t *> tables;
+	std::vector<table_t *> vec_tables;
     std::map<string, INDEX *> indexes;
+
+    tbb::concurrent_set<uint64_t> total_primary_keys;
 
     table_t *tables_[32];
     INDEX *indexes_[32]; // 32 indexes at most
@@ -36,6 +43,6 @@ public:
 	bool sim_done;
 protected:
 	void index_insert(string index_name, uint64_t key, row_t * row);
-	void index_insert(INDEX * index, uint64_t key, row_t * row, int64_t part_id = -1);
+	void index_insert(INDEX * index, uint64_t key, row_t * row, int64_t part_id = -1, uint64_t row_id = 0);
 };
 

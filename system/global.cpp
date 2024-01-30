@@ -53,11 +53,18 @@ UInt32 g_virtual_part_cnt = VIRTUAL_PART_CNT;
 UInt32 g_thread_cnt = THREAD_CNT;
 UInt64 g_synth_table_size = SYNTH_TABLE_SIZE;
 UInt32 g_req_per_query = REQ_PER_QUERY;
+UInt32 g_req_per_query_ap = REQ_PER_QUERY_AP;
 UInt32 g_field_per_tuple = FIELD_PER_TUPLE;
 UInt32 g_init_parallelism = INIT_PARALLELISM;
 
 UInt32 g_num_wh = NUM_WH;
 double g_perc_payment = PERC_PAYMENT;
+double g_perc_stocklevel = PERC_STOCKLEVEL;
+double g_perc_neworder = PERC_NEWORDER;
+double g_perc_query_2 = PERC_QUERY_2;
+double g_perc_orderstatus =  PERC_ORDERSTATUS;
+double g_perc_delivery = PERC_DELIVERY;
+
 bool g_wh_update = WH_UPDATE;
 char * output_file = NULL;
 
@@ -66,7 +73,8 @@ map<string, string> g_params;
 #if TPCC_SMALL
 UInt32 g_max_items = 10000;
 UInt32 g_cust_per_dist = 2000;
-#else 
+#else
 UInt32 g_max_items = 100000;
 UInt32 g_cust_per_dist = 3000;
 #endif
+uint64_t g_max_orderline = uint64_t(1) << 32;

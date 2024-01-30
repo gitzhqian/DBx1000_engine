@@ -68,7 +68,7 @@ ts_t txn_man::get_ts() {
 }
 
 void txn_man::cleanup(RC rc) {
-#if CC_ALG == HEKATON
+#if CC_ALG == HEKATON || PELOTON
     row_cnt = 0;
     wr_cnt = 0;
 	insert_cnt = 0;
@@ -119,13 +119,39 @@ void txn_man::cleanup(RC rc) {
 	dl_detector.clear_dep(get_txn_id());
 #endif
 }
-row_t* txn_man::search(INDEX* index, idx_key_t key, int part_id,
-                       access_t type) {
-    void* row;
-    row = index_read(index, key,part_id);
-    if (row == NULL) return NULL;
+int txn_man::index_read_range(INDEX * index, idx_key_t key, idx_key_t max_key,
+                               std::vector<row_t *> **items, int range, int part_id) {
 
-    return get_row(row, type);
+    void *output = nullptr;
+    int count = 0;
+    count = index->index_scan(key, range, &output);
+    *items = reinterpret_cast<std::vector<row_t *> *>(output);
+
+    return count;
+}
+row_t* txn_man::search(INDEX* index, idx_key_t key, int part_id, access_t type) {
+	row_t * row_local;
+    void* vd_row;
+	vd_row = index_read(index, key,part_id);
+    if (vd_row == nullptr){
+        return NULL;
+    }
+#if ENGINE_TYPE == PTR0
+	row_local = get_row(vd_row, type);
+#else
+	auto row = reinterpret_cast<row_t *>(vd_row);// row_t meta
+	if (row->data == nullptr){
+		return NULL;
+	}
+	uint64_t payload = *reinterpret_cast<uint64_t *>(row->data);
+	auto m_item = reinterpret_cast<itemid_t *>(payload);
+	auto master_row = m_item->location;
+	row_local = get_row(master_row, type);
+#endif
+
+    if (row_local == NULL) return NULL;
+
+    return row_local;
 }
 
 row_t * txn_man::get_row(void * row_v, access_t type) {
@@ -150,12 +176,14 @@ row_t * txn_man::get_row(void * row_v, access_t type) {
 
     auto row_curr = reinterpret_cast<row_t *>(row_v);
 #if ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
-    rc = row_curr->get_row(type, this, accesses[row_cnt]->data);
+    rc = row_curr->get_row(type, this, accesses[row_cnt]->data, accesses[row_cnt]->read_latest_begin, accesses[row_cnt]->read_addr);
     accesses[row_cnt]->orig_row = row_curr;
 #elif ENGINE_TYPE == PTR0
     accesses[row_cnt]->orig_row = row_curr;
     accesses[row_cnt]->data = row_curr;
-    rc = row_curr->get_row(type, this, accesses[ row_cnt ]->data);
+    accesses[row_cnt]->read_latest_begin = INF;
+    accesses[row_cnt]->read_addr = INF;
+    rc = row_curr->get_row(type, this, accesses[ row_cnt ]->data, accesses[row_cnt]->read_latest_begin, accesses[row_cnt]->read_addr);
 #endif
 
 	if (rc == Abort) {
@@ -170,6 +198,8 @@ row_t * txn_man::get_row(void * row_v, access_t type) {
 	accesses[row_cnt]->tid = last_tid;
 #elif CC_ALG == HEKATON
 	accesses[row_cnt]->history_entry = history_entry;
+#elif CC_ALG == PELOTON
+    accesses[row_cnt]->_write_list_header = write_list_header;
 #endif
 
 #if ROLL_BACK && (CC_ALG == DL_DETECT || CC_ALG == NO_WAIT || CC_ALG == WAIT_DIE)
@@ -201,9 +231,9 @@ void txn_man::insert_row(row_t * row, table_t * table) {
 	insert_rows[insert_cnt++] = row;
 }
 
-bool txn_man::insert_row_to_table(row_t * row, table_t * table, int part_id,
+bool txn_man::insert_row_to_table(row_t * &row, table_t * table, int part_id,
                                 uint64_t& out_row_id) {
-    assert(CC_ALG == HEKATON);
+//    assert(CC_ALG == HEKATON);
     if (table->get_new_row(row, part_id, out_row_id) != RCOK) return false;
 //    assert(insert_cnt < MAX_ROW_PER_TXN);
 //    insert_rows[insert_cnt++] = row;
@@ -230,10 +260,10 @@ bool txn_man::insert_row_to_index(INDEX* index, idx_key_t ins_key, row_t* row,
     m_item->location = ins_row;
     uint64_t new_row_addr = reinterpret_cast<uint64_t>(m_item);
     char *data_ = reinterpret_cast<char *>(&new_row_addr);
-    rc = index_->index_insert(key, row_item, data_);
+    rc = index->index_insert(key, row_item, data_, 0);
 #elif ENGINE_TYPE == PTR0
     void *row_insert = nullptr;
-    rc = index->index_insert(key, row_insert, ins_row->data);
+    rc = index->index_insert(key, row_insert, ins_row->data, 0);
 #endif
 
     if (rc == RCOK){
@@ -270,7 +300,7 @@ RC txn_man::insert_row_finish(RC rc){
             m_item->location = ins_row;
             uint64_t new_row_addr = reinterpret_cast<uint64_t>(m_item);
             char *data_ = reinterpret_cast<char *>(&new_row_addr);
-            rc = index_->index_insert(key, row_item, data_);
+            rc = index_->index_insert(key, row_item, data_, ins_row->_row_id);
 #endif
 //            if(rc==RCOK){
 //                new_row = reinterpret_cast<row_t *>(row_item);
@@ -290,13 +320,13 @@ RC txn_man::insert_row_finish(RC rc){
 }
 
 void *txn_man::index_read(INDEX * index, idx_key_t key, int part_id) {
-	uint64_t starttime = get_sys_clock();
-	void * item;
+//	uint64_t starttime = get_sys_clock();
+	void * item = nullptr;
 	auto rc = index->index_read(key, item, part_id, get_thd_id());
 	if (rc != RCOK){
 	    item = NULL;
 	}
-    INC_TMP_STATS(get_thd_id(), time_index, get_sys_clock() - starttime);
+//    INC_TMP_STATS(get_thd_id(), time_index, get_sys_clock() - starttime);
 
 	return item;
 }
@@ -304,7 +334,7 @@ void *txn_man::index_read(INDEX * index, idx_key_t key, int part_id) {
 void txn_man::index_read(INDEX * index, idx_key_t key, int part_id, void *& item) {
 	uint64_t starttime = get_sys_clock();
 	index->index_read(key, item, part_id, get_thd_id());
-	INC_TMP_STATS(get_thd_id(), time_index, get_sys_clock() - starttime);
+//	INC_TMP_STATS(get_thd_id(), time_index, get_sys_clock() - starttime);
 }
 
 RC txn_man::finish(RC rc) {
@@ -329,6 +359,9 @@ RC txn_man::finish(RC rc) {
 		cleanup(rc);
 #elif CC_ALG == HEKATON
 	rc = validate_hekaton(rc);
+	cleanup(rc);
+#elif CC_ALG == PELOTON
+    rc = validate_peloton(rc);
 	cleanup(rc);
 #else 
 	cleanup(rc);

@@ -16,7 +16,8 @@ public:
 							int part_id=-1 )=0;
     virtual RC 			index_insert(idx_key_t key,
                                        void * &item,
-                                       char *payload)=0;
+                                       char *payload,
+                                       uint64_t row_id =0)=0;
 
 	virtual RC	 		index_read(idx_key_t key,
                              void * &item,

@@ -8,6 +8,7 @@
 #include "row_ts.h"
 #include "row_mvcc.h"
 #include "row_hekaton.h"
+#include "row_peloton.h"
 #include "row_occ.h"
 #include "row_tictoc.h"
 #include "row_silo.h"
@@ -17,43 +18,49 @@
 
 RC 
 row_t::init(table_t * host_table, uint64_t part_id, uint64_t row_id, uint32_t tuple_size) {
-#if ENGINE_TYPE == PTR0
-    data = (char *) _mm_malloc(sizeof(char) * tuple_size, 64);
-    valid = false;
-#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 	_row_id = row_id;
 	_part_id = part_id;
 	this->table = host_table;
 	Catalog * schema = host_table->get_schema();
 	int tuple_size_ = schema->get_tuple_size();
     data = (char *) _mm_malloc(sizeof(char) * tuple_size_, 64);
-    valid = false;
+    is_valid = VALID;
 
-    next = nullptr;
-#endif
+//    next = nullptr;
 
 	return RCOK;
 }
-void 
-row_t::init(int size)
+void row_t::init(int size )
 {
-#if ENGINE_TYPE == PTR0
-    data = (char *) _mm_malloc(size, 64);
-    valid = false;
-#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 	data = (char *) _mm_malloc(size, 64);
-    valid = false;
-    next = nullptr;
-#endif
+    is_valid = VALID;
 
 }
+void row_t::init_insrt(table_t * table_, uint64_t part_id, uint64_t row_id)
+{
+    table = table_;
+    _part_id = 0;
+    _row_id = row_id;
+    is_valid = VALID;
 
-RC 
-row_t::switch_schema(table_t * host_table) {
-#if ENGINE_TYPE == PTR0
-#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
+}
+void row_t::init(int size, row_t * src)
+{
+    uint32_t alloc_sz = src->table->get_schema()->get_tuple_size();
+    data = (char *) _mm_malloc(alloc_sz, 64);
+    is_valid = VALID;
+
+    _primary_key = src->_primary_key;
+    _row_id = src->_row_id;
+    _part_id = src->_part_id;
+    table = src->table;
+    manager = src->manager;
+
+    memcpy(data, src->data, alloc_sz);
+}
+
+RC row_t::switch_schema(table_t * host_table) {
 	this->table = host_table;
-#endif
 	return RCOK;
 }
 
@@ -66,6 +73,8 @@ void row_t::init_manager(row_t * row) {
     manager = (Row_mvcc *) _mm_malloc(sizeof(Row_mvcc), 64);
 #elif CC_ALG == HEKATON
     manager = (Row_hekaton *) _mm_malloc(sizeof(Row_hekaton), 64);
+#elif CC_ALG == PELOTON
+    manager = (Row_peloton *) _mm_malloc(sizeof(Row_peloton), 64);
 #elif CC_ALG == OCC
     manager = (Row_occ *) mem_allocator.alloc(sizeof(Row_occ), _part_id);
 #elif CC_ALG == TICTOC
@@ -82,10 +91,7 @@ void row_t::init_manager(row_t * row) {
 }
 
 table_t * row_t::get_table() {
-#if ENGINE_TYPE == PTR0
-#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 	return table;
-#endif
 }
 
 Catalog * row_t::get_schema() { 
@@ -155,7 +161,7 @@ void row_t::free_row() {
 	free(data);
 }
 
-RC row_t::get_row(access_t type, txn_man * txn, row_t *& row){
+RC row_t::get_row(access_t type, txn_man * txn, row_t *& row, ts_t & read_latest, uint64_t &read_addr){
 	RC rc = RCOK;
 #if CC_ALG == WAIT_DIE || CC_ALG == NO_WAIT || CC_ALG == DL_DETECT
 	uint64_t thd_id = txn->get_thd_id();
@@ -231,7 +237,7 @@ RC row_t::get_row(access_t type, txn_man * txn, row_t *& row){
 		row = this;
 	}
 	return rc;
-#elif CC_ALG == TIMESTAMP || CC_ALG == MVCC || CC_ALG == HEKATON 
+#elif CC_ALG == TIMESTAMP || CC_ALG == MVCC || CC_ALG == HEKATON || CC_ALG == PELOTON
 	uint64_t thd_id = txn->get_thd_id();
 	// For TIMESTAMP RD, a new copy of the row will be returned.
 	// for MVCC RD, the version will be returned instead of a copy
@@ -245,13 +251,15 @@ RC row_t::get_row(access_t type, txn_man * txn, row_t *& row){
   #endif
 
 	// TODO need to initialize the table/catalog information.
-	TsType ts_type = (type == RD)? R_REQ : P_REQ;
-    ts_type = (type == SCAN)? S_REQ : ts_type;
-    ts_type = (type == RO)? O_REQ : ts_type;
+	TsType ts_type = (type == WR)? P_REQ : R_REQ;
+//    ts_type = (type == SCAN)? S_REQ : ts_type;
+//    ts_type = (type == RO)? O_REQ : ts_type;
 	rc = this->manager->access(txn, ts_type, row);
 
 	if (rc == RCOK ) {
 		row = txn->cur_row;
+        read_addr = txn->cur_addr;
+        read_latest = txn->read_latest_begin;
 	} else if (rc == WAIT) {
 		uint64_t t1 = get_sys_clock();
 		while (!txn->ts_ready)
@@ -261,12 +269,10 @@ RC row_t::get_row(access_t type, txn_man * txn, row_t *& row){
 		row = txn->cur_row;
 	}
 
-#if ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
 	if (rc != Abort) {
 		row->table = get_table();
 		assert(row->get_schema() == this->get_schema());
 	}
-#endif
 
 	return rc;
 #elif CC_ALG == OCC

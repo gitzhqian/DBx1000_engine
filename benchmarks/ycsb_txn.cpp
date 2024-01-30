@@ -48,24 +48,12 @@ RC ycsb_txn_man::run_txn(base_query * query) {
         access_t type = req->rtype;
 
 		while (!finish_req) {
-//			if (iteration == 0) {
-//                vd_row = index_read(_wl->the_index, req->key, part_id);
-//			}
-//#if INDEX_STRUCT == IDX_BTREE
-//            else {
-//                _wl->the_index->index_next(get_thd_id(), vd_row);
-//                if (vd_row == NULL){
-//                    break;
-//                }
-//            }
-//#endif
             if (type == RD || type == RO || type == WR) {
                 vd_row = index_read(_wl->the_index, req->key, part_id);
 			}else if (type == SCAN && iteration == 0){
-//                uint64_t scan_key = zipf.GetNextNumber();
                 uint64_t scan_start_key = req->key;
                 scan_iter = _wl->the_index->RangeScanBySize(reinterpret_cast<char *>(&scan_start_key),
-                                                            KEY_SIZE, scan_range);
+                                                            sizeof(idx_key_t), scan_range);
                 auto get_next_row_ = scan_iter ->GetNext();
                 if (get_next_row_ == nullptr) {
                     break;
@@ -79,72 +67,37 @@ RC ycsb_txn_man::run_txn(base_query * query) {
                 }else{
                     vd_row = get_next_row_;
                 }
-            }else if(type == INS){
-                row_t *new_row = NULL;
-                uint64_t row_id = rid;
-                auto part_id = key_to_part(row_id);
-                uint64_t primary_key = req->key;
-#if ENGINE_TYPE != PTR0
-//                rc = _wl->the_table->get_new_row(new_row,part_id,row_id, false);
-                new_row = (row_t *) _mm_malloc(sizeof(row_t), 64);
-                rc = new_row->init(_wl->the_table, part_id, row_id);
-                new_row->init_manager(new_row);
-//                primary_key = _wl->the_table->get_table_size();
-                new_row->set_primary_key(primary_key);
-                for (int fid = 0; fid < tuple_size; fid ++) {
-                    new_row->data[fid] = 'h';
-                }
-                insert_row(new_row, _wl->the_table);
-#elif ENGINE_TYPE == PTR0
-                tuple_size = PAYLOAD_SIZE;
-//                rc = _wl->the_table->get_new_row(new_row, tuple_size);
-                new_row = (row_t *) _mm_malloc(sizeof(row_t), 64);
-                new_row->init(tuple_size);
-//                primary_key = _wl->the_table->get_table_size();
-                new_row->set_primary_key(primary_key);
-                for (int fid = 0; fid < tuple_size; fid ++) {
-                    new_row->data[fid] = 'h';
-                }
+            }else if(type == INS ){
+                row_t *ins_row = NULL;
+                uint64_t row_id ;
+                auto ret = insert_row_to_table(ins_row, _wl->the_table, 0,row_id);
+                assert(ret);
+                uint64_t primary_k = req->key;
+                insert_row_to_index(_wl->the_index, primary_k, ins_row, 0);
 
-                void *row_insert = nullptr;
-                auto index_ = _wl->the_index;
-                rc = index_->index_insert(primary_key, row_insert, new_row->data);
-#endif
-                if (rc == Abort){
-                    goto final;
-                }
-
-                finish_req = true;
-                //assert(rc == RCOK);
-                continue;
-            }
-
-			if (vd_row == nullptr){
                 iteration ++;
-                if (req->rtype == RD || req->rtype == RO || req->rtype == WR || iteration == req->scan_len){
-                    finish_req = true;
-                }
+                finish_req = true;
                 continue;
-			}
-
-            row_t * row_local;
-
-#if ENGINE_TYPE == PTR0
-            if(type == SCAN){
-                // if scan/update workload
-                row_local = get_row(vd_row, RD);
-                // if scan/insert workload
-//                row_local = reinterpret_cast<row_t *>(vd_row);
-                if(row_local == NULL || !row_local->valid || row_local->IsInserting()) {
-                    iteration ++;
-                    if (iteration == req->scan_len){
-                        finish_req = true;
-                    }
-                    continue;
-                }
-            }else{
-                row_local = get_row(vd_row, type);
             }
+
+            row_t * row_local = nullptr;
+#if ENGINE_TYPE == PTR0
+            row_local = get_row(vd_row, type);
+//            if(type == SCAN){
+//                // if scan/update workload
+//                row_local = get_row(vd_row, RD);
+//                // if scan/insert workload
+////                row_local = reinterpret_cast<row_t *>(vd_row);
+//                if(row_local == NULL || (row_local->is_valid != VALID)) {
+//                    iteration ++;
+//                    if (iteration == req->scan_len){
+//                        finish_req = true;
+//                    }
+//                    continue;
+//                }
+//            }else{
+//                row_local = get_row(vd_row, type);
+//            }
 #elif ENGINE_TYPE == PTR1
             row = reinterpret_cast<row_t *>(vd_row);// row_t meta
             if (row->data == nullptr){
@@ -177,24 +130,24 @@ RC ycsb_txn_man::run_txn(base_query * query) {
             uint64_t payload = *reinterpret_cast<uint64_t *>(row->data);
             m_item = reinterpret_cast<itemid_t *>(payload);
             master_row = m_item->location;
-            //row_t *vd_row_ = reinterpret_cast<row_t *>(master_row);
-            if(type == SCAN){
-//               if(vd_row_ == NULL || !vd_row_->valid || vd_row_->IsInserting()) {
-//                    iteration ++;
-//                    if (iteration == req->scan_len){
-//                        finish_req = true;
-//                    }
-//                    continue;
-//                }
-               //if scan/update workload, type=RD
-               //if scan/insert workload. type=SCAN
-               row_local = get_row(master_row, RD);
-            }else{
-               row_local = get_row(master_row, type);
-            }
+            row_local = get_row(master_row, type);
+//            if(type == SCAN){
+////               if(vd_row_ == NULL || !vd_row_->valid || vd_row_->IsInserting()) {
+////                    iteration ++;
+////                    if (iteration == req->scan_len){
+////                        finish_req = true;
+////                    }
+////                    continue;
+////                }
+//               //if scan/update workload, type=RD
+//               //if scan/insert workload. type=SCAN
+//               row_local = get_row(master_row, RD);
+//            }else{
+//               row_local = get_row(master_row, type);
+//            }
 #endif
-
             if (row_local == NULL) {
+//                printf("row_local abort. \n");
                 rc = Abort;
                 goto final;
             }
@@ -204,13 +157,15 @@ RC ycsb_txn_man::run_txn(base_query * query) {
                 if (req->rtype == RD || req->rtype == RO || req->rtype == SCAN) {
                     char *data = row_local->data;
                     auto fild_count = schema->get_field_cnt();
-#if ENGINE_TYPE == PTR0
-//                    data = data + KEY_SIZE;
+
                     __attribute__((unused)) char * value = (&data[tuple_size]);
-#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
-                    __attribute__((unused)) char * value = (&data[tuple_size]);
-#endif
                 } else {
+
+
+#if STATISTIC_CHAIN ==true
+                    _wl->total_primary_keys.insert(req->key);
+#endif
+
                     assert(req->rtype == WR);
                     char *update_location;
                     auto fild_count = schema->get_field_cnt();
@@ -234,10 +189,6 @@ RC ycsb_txn_man::run_txn(base_query * query) {
 					auto master_latest_val = std::make_pair(row_local, value_upt);
                     master_latest_val_.emplace_back(master_latest_val);
 #endif
-//#if ENGINE_TYPE == PTR1 //for single version
-//                    char *row_data = vd_row_->data;
-//                    memcpy(row_data, row_local->data, MAX_TUPLE_SIZE);
-//#endif
                 }
             }
 
@@ -254,10 +205,6 @@ RC ycsb_txn_man::run_txn(base_query * query) {
 final:
 
     //insert for ptr1 and ptr2
-#if ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
-    rc = insert_row_finish(rc);
-#endif
-
     rc = finish(rc);
 
     //update for ptr0 and ptr2
@@ -276,9 +223,7 @@ final:
             for (int rid = 0; rid < sz; ++rid) {
                 auto master_loc = master_latest_val_[rid].first;
                 char *value_upt = master_latest_val_[rid].second;
-                auto data_location = reinterpret_cast<DualPointer *>(master_loc->location);
-                auto row_meta = reinterpret_cast<row_t *>(data_location->row_t_location);
-                char *update_location = row_meta->data;
+                auto update_location = master_loc->data;
                 memcpy(update_location, value_upt, tuple_size);
 
                 _mm_free(value_upt);

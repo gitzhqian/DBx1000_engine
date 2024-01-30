@@ -1,5 +1,6 @@
 #include "tpcc_helper.h"
 #include <city.h>
+#include <random>
 
 drand48_data ** tpcc_buffer;
 
@@ -15,10 +16,10 @@ uint64_t custKey(uint64_t c_id, uint64_t c_d_id, uint64_t c_w_id) {
     return (distKey(c_d_id, c_w_id) * g_cust_per_dist + c_id);
 }
 
-uint64_t custNPKey(uint64_t c_d_id, uint64_t c_w_id, const char* c_last) {
-    return CityHash64(c_last, strlen(c_last)) * g_num_wh * DIST_PER_WARE +
-           distKey(c_d_id, c_w_id);
-}
+//uint64_t custNPKey(uint64_t c_d_id, uint64_t c_w_id, const char* c_last) {
+////    return CityHash64(c_last, strlen(c_last)) * g_num_wh * DIST_PER_WARE +
+//  //         distKey(c_d_id, c_w_id);
+//}
 
 uint64_t stockKey(uint64_t s_i_id, uint64_t s_w_id) {
     return s_w_id * g_max_items + s_i_id;
@@ -46,8 +47,7 @@ uint64_t neworderKey(int64_t o_id, uint64_t o_d_id, uint64_t o_w_id) {
 uint64_t orderlineKey(uint64_t ol_number, int64_t ol_o_id, uint64_t ol_d_id,
                       uint64_t ol_w_id) {
     // Use negative ol_o_id to allow reusing the current index interface.
-    return distKey(ol_d_id, ol_w_id) * g_max_orderline * 15 +
-           (g_max_orderline - ol_o_id) * 15 + ol_number;
+    return distKey(ol_d_id, ol_w_id) * g_max_orderline * 15 + (g_max_orderline - ol_o_id) * 15 + ol_number;
 }
 
 uint64_t Lastname(uint64_t num, char* name) {
@@ -104,7 +104,8 @@ uint64_t NURand(uint64_t A, uint64_t x, uint64_t y, uint64_t thd_id) {
   }
   return(((URand(0,A, thd_id) | URand(x,y, thd_id))+C)%(y-x+1))+x;
 }
-
+std::random_device rd;
+std::mt19937 rng(rd());
 uint64_t MakeAlphaString(int min, int max, char* str, uint64_t thd_id) {
     char char_list[] = {'1','2','3','4','5','6','7','8','9','a','b','c',
                         'd','e','f','g','h','i','j','k','l','m','n','o',
@@ -119,7 +120,30 @@ uint64_t MakeAlphaString(int min, int max, char* str, uint64_t thd_id) {
 
     return cnt;
 }
+std::string GetRandomAlphaNumericString(uint32_t string_length) {
+    const char alphanumeric[] =
+            "0123456789"
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            "abcdefghijklmnopqrstuvwxyz";
 
+    std::uniform_int_distribution<> dist(0, sizeof(alphanumeric) - 1);
+
+    char repeated_char = alphanumeric[dist(rng)];
+    std::string sample(string_length, repeated_char);
+    return sample;
+}
+int GetRandomInteger(const int lower_bound, const int upper_bound) {
+    std::uniform_int_distribution<> dist(lower_bound, upper_bound);
+
+    int sample = dist(rng);
+    return sample;
+}
+double GetRandomDouble(const double lower_bound, const double upper_bound) {
+    std::uniform_real_distribution<> dist(lower_bound, upper_bound);
+
+    double sample = dist(rng);
+    return sample;
+}
 uint64_t MakeNumberString(int min, int max, char* str, uint64_t thd_id) {
 
   uint64_t cnt = URand(min, max, thd_id);

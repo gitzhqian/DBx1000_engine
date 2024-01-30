@@ -28,8 +28,7 @@ Arena::init(int arena_id, int size) {
 	_block_size = size;
 }
 
-void *
-Arena::alloc() {
+void * Arena::alloc() {
 	FreeBlock * block;
 	if (_head == NULL) {
 		// not in the list. allocate from the buffer

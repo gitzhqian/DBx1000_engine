@@ -121,6 +121,8 @@ void Stats::print() {
 	double total_time_ts_alloc = 0;
 	double total_latency = 0;
 	double total_time_query = 0;
+    double total_time_q2 = 0;
+    double total_chain_length = 0;
 	for (uint64_t tid = 0; tid < g_thread_cnt; tid ++) {
 		total_txn_cnt += _stats[tid]->txn_cnt;
 		total_abort_cnt += _stats[tid]->abort_cnt;
@@ -138,6 +140,8 @@ void Stats::print() {
 		total_time_ts_alloc += _stats[tid]->time_ts_alloc;
 		total_latency += _stats[tid]->latency;
 		total_time_query += _stats[tid]->time_query;
+        total_time_q2 += _stats[tid]->time_q2;
+        total_chain_length += _stats[tid]->chain_length;
 		
 		printf("[tid=%ld] txn_cnt=%ld,abort_cnt=%ld\n", 
 			tid,
@@ -149,13 +153,15 @@ void Stats::print() {
 	if (output_file != NULL) {
 		outf = fopen(output_file, "w");
 		fprintf(outf, "[summary] txn_cnt=%ld, abort_cnt=%ld"
-			", run_time=%f, time_wait=%f, time_ts_alloc=%f"
+			", run_time=%f, time_q2=%f, total_chain_length=%f, time_wait=%f, time_ts_alloc=%f"
 			", time_man=%f, time_index=%f, time_abort=%f, time_cleanup=%f, latency=%f"
 			", deadlock_cnt=%ld, cycle_detect=%ld, dl_detect_time=%f, dl_wait_time=%f"
 			", time_query=%f, debug1=%f, debug2=%f, debug3=%f, debug4=%f, debug5=%f\n",
 			total_txn_cnt, 
 			total_abort_cnt,
 			total_run_time / BILLION,
+            total_time_q2 / BILLION,
+            total_chain_length,
 			total_time_wait / BILLION,
 			total_time_ts_alloc / BILLION,
 			(total_time_man - total_time_wait) / BILLION,
@@ -177,13 +183,15 @@ void Stats::print() {
 		fclose(outf);
 	}
 	printf("[summary] txn_cnt=%ld, abort_cnt=%ld"
-		", run_time=%f, time_wait=%f, time_ts_alloc=%f"
+		", run_time=%f, time_q2=%f, total_chain_length=%f, time_wait=%f, time_ts_alloc=%f"
 		", time_man=%f, time_index=%f, time_abort=%f, time_cleanup=%f, latency=%f"
 		", deadlock_cnt=%ld, cycle_detect=%ld, dl_detect_time=%f, dl_wait_time=%f"
 		", time_query=%f, debug1=%f, debug2=%f, debug3=%f, debug4=%f, debug5=%f\n", 
 		total_txn_cnt, 
 		total_abort_cnt,
 		total_run_time / BILLION,
+        total_time_q2 / BILLION,
+        total_chain_length,
 		total_time_wait / BILLION,
 		total_time_ts_alloc / BILLION,
 		(total_time_man - total_time_wait) / BILLION,

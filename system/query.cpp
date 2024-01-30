@@ -65,17 +65,16 @@ Query_queue::threadInitQuery(void * This) {
 //     class Query_thd
 /*************************************************/
 
-void 
-Query_thd::init(workload * h_wl, int thread_id) {
+void Query_thd::init(workload * h_wl, int thread_id) {
 	uint64_t request_cnt;
 	q_idx = 0;
 	request_cnt = WARMUP / g_thread_cnt + MAX_TXN_PER_PART + 4;
 #if ABORT_BUFFER_ENABLE
     request_cnt += ABORT_BUFFER_SIZE;
 #endif
+
 #if WORKLOAD == YCSB	
-	queries = (ycsb_query *) 
-		mem_allocator.alloc(sizeof(ycsb_query) * request_cnt, thread_id);
+	queries = (ycsb_query *) mem_allocator.alloc(sizeof(ycsb_query) * request_cnt, thread_id);
 	srand48_r(thread_id + 1, &buffer);
 
     //generate insert keys
@@ -93,8 +92,9 @@ Query_thd::init(workload * h_wl, int thread_id) {
 #elif WORKLOAD == TPCC
 	queries = (tpcc_query *) _mm_malloc(sizeof(tpcc_query) * request_cnt, 64);
 #endif
-	for (UInt32 qid = 0; qid < request_cnt; qid ++) {
-#if WORKLOAD == YCSB	
+
+    for (UInt32 qid = 0; qid < request_cnt; qid ++) {
+#if WORKLOAD == YCSB
 		new(&queries[qid]) ycsb_query();
 		queries[qid].init(thread_id, h_wl, this, random_insert_keys, qid);
 #elif WORKLOAD == TPCC
@@ -102,6 +102,10 @@ Query_thd::init(workload * h_wl, int thread_id) {
 		queries[qid].init(thread_id, h_wl);
 #endif
 	}
+
+
+
+
 }
 
 base_query * 

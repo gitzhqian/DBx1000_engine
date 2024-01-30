@@ -3,6 +3,7 @@
 
 #include "wl.h"
 #include "txn.h"
+#include "tpcc_const.h"
 
 class table_t;
 class INDEX;
@@ -28,18 +29,25 @@ public:
 	INDEX * 	i_item;
 	INDEX * 	i_warehouse;
 	INDEX * 	i_district;
-    INDEX *  i_district_ext;
+    INDEX *     i_district_ext;
 	INDEX * 	i_customer_id;
-	INDEX * 	i_customer_last;
+//	INDEX * 	i_customer_last;
 	INDEX * 	i_stock;
 	INDEX * 	i_order; // key = (w_id, d_id, o_id)
-    INDEX *	    i_order_cust;
+//    INDEX *	    i_order_cust;
     INDEX * 	i_neworder; // key = (w_id, d_id, o_id)
 	INDEX * 	i_orderline; // key = (w_id, d_id, o_id)
 	INDEX * 	i_orderline_wd; // key = (w_id, d_id). 
 	
 	bool ** delivering;
 	uint32_t next_tid;
+    //wid->did->cid->oid
+    std::map<uint64_t, std::map<uint64_t, std::map<uint64_t ,uint64_t>>> w_d_cid_oid;
+    std::map<uint64_t, Region *> ch_regions;
+    std::map<uint64_t, Nation *> ch_nations;
+    std::map<uint64_t, Supplier *> ch_suppliers;
+    std::vector<std::vector<std::pair<int32_t, int32_t>>> supp_stock_map ; // ,w_id,i_id
+
 private:
 	uint64_t num_wh;
 	void init_tab_item();
@@ -49,8 +57,11 @@ private:
 	void init_tab_cust(uint64_t d_id, uint64_t w_id);
 	void init_tab_hist(uint64_t c_id, uint64_t d_id, uint64_t w_id);
 	void init_tab_order(uint64_t d_id, uint64_t w_id);
-	
-	void init_permutation(uint64_t * perm_c_id, uint64_t wid);
+    void init_tab_region();
+    void init_tab_nation();
+    void init_tab_supplier();
+
+    void init_permutation(uint64_t * perm_c_id, uint64_t wid);
 
     static void * threadInitItem(void * This);
     static void * threadInitWh(void * This);
@@ -75,6 +86,7 @@ private:
 	RC run_order_status(tpcc_query * query);
 	RC run_delivery(tpcc_query * query);
 	RC run_stock_level(tpcc_query * query);
+    RC run_query2(tpcc_query * query );
 
     row_t* payment_getWarehouse(uint64_t w_id);
     void payment_updateWarehouseBalance(row_t* row, double h_amount);
@@ -108,7 +120,7 @@ private:
                                    uint64_t ol_supply_w_id,
                                    uint64_t ol_delivery_d, uint64_t ol_quantity,
                                    double ol_amount, const char* ol_dist_info);
-
+    uint64_t order_status_getOrderId( uint64_t w_id, uint64_t d_id, uint64_t c_id);
     row_t* order_status_getCustomerByCustomerId(uint64_t w_id, uint64_t d_id,
                                                 uint64_t c_id);
     row_t* order_status_getCustomerByLastName(uint64_t w_id, uint64_t d_id,
@@ -117,8 +129,8 @@ private:
     row_t* order_status_getLastOrder(uint64_t w_id, uint64_t d_id, uint64_t c_id);
     bool order_status_getOrderLines(uint64_t w_id, uint64_t d_id, int64_t o_id);
 
-    bool delivery_getNewOrder_deleteNewOrder(uint64_t d_id, uint64_t w_id,
-                                             int64_t* out_o_id);
+    bool delivery_getNewOrder_deleteNewOrder(uint64_t n_o_id, uint64_t d_id,
+                                             uint64_t w_id, int64_t* out_o_id);
     row_t* delivery_getCId(int64_t no_o_id, uint64_t d_id, uint64_t w_id);
     void delivery_updateOrders(row_t* row, uint64_t o_carrier_id);
     bool delivery_updateOrderLine_sumOLAmount(uint64_t o_entry_d, int64_t no_o_id,
@@ -132,6 +144,7 @@ private:
                                    int64_t ol_o_id, uint64_t s_w_id,
                                    uint64_t threshold,
                                    uint64_t* out_distinct_count);
+
 };
 
 #endif

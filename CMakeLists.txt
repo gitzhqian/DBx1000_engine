@@ -15,4 +15,4 @@ INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/benchmarks/ ${PR
 #LINK_DIRECTORIES(${PROJECT_SOURCE_DIR}/libs)
 file(GLOB_RECURSE SRC_FILES benchmarks/*.cpp concurrency_control/*.cpp storage/*.cpp system/*.cpp config.cpp)
 add_executable(rundb ${SRC_FILES})
-target_link_libraries(rundb libpthread.so libjemalloc.so)
+target_link_libraries(rundb libpthread.so libjemalloc.so -ltbb)

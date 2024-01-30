@@ -1,4 +1,5 @@
 #include <sched.h>
+#include <thread>
 #include "global.h"
 #include "manager.h"
 #include "thread.h"
@@ -106,9 +107,10 @@ RC thread_t::run() {
 
 		if ((CC_ALG == HSTORE && !HSTORE_LOCAL_TS)
 				|| CC_ALG == MVCC 
-				|| CC_ALG == HEKATON
-				|| CC_ALG == TIMESTAMP) 
-			m_txn->set_ts(get_next_ts());
+				|| CC_ALG == HEKATON || CC_ALG == PELOTON
+				|| CC_ALG == TIMESTAMP){
+            m_txn->set_ts(get_next_ts());
+		}
 
 		rc = RCOK;
 #if CC_ALG == HSTORE
@@ -202,8 +204,7 @@ RC thread_t::run() {
 }
 
 
-ts_t
-thread_t::get_next_ts() {
+ts_t thread_t::get_next_ts() {
 	if (g_ts_batch_alloc) {
 		if (_curr_ts % g_ts_batch_num == 0) {
 			_curr_ts = glob_manager->get_ts(get_thd_id());
@@ -239,4 +240,11 @@ RC thread_t::runTest(txn_man * txn)
 	}
 	assert(false);
 	return RCOK;
+}
+
+void threade_t::run(){
+     while (is_running_){
+         std::this_thread::sleep_for(std::chrono::milliseconds(LOG_BATCH_TIME));
+         glob_manager->update_epoch();
+     }
 }

@@ -22,47 +22,70 @@ RC workload::init_schema(string schema_file) {
     Catalog * schema;
     while (getline(fin, line)) {
 		if (line.compare(0, 6, "TABLE=") == 0) {
-			string tname;
-			tname = &line[6];
-			schema = (Catalog *) _mm_malloc(sizeof(Catalog), CL_SIZE);
-			getline(fin, line);
-			int col_count = 0;
-			// Read all fields for this table.
-			vector<string> lines;
-			while (line.length() > 1) {
-				lines.push_back(line);
-				getline(fin, line);
-			}
-			schema->init( tname.c_str(), lines.size() );
-			for (UInt32 i = 0; i < lines.size(); i++) {
-				string line = lines[i];
-			    size_t pos = 0;
-				string token;
-				int elem_num = 0;
-				int size = 0;
-				string type;
-				string name;
-				while (line.length() != 0) {
-					pos = line.find(",");
-					if (pos == string::npos)
-						pos = line.length();
-	    			token = line.substr(0, pos);
-			    	line.erase(0, pos + 1);
-					switch (elem_num) {
-					case 0: size = atoi(token.c_str()); break;
-					case 1: type = token; break;
-					case 2: name = token; break;
-					default: assert(false);
-					}
-					elem_num ++;
-				}
-				assert(elem_num == 3);
-                schema->add_col((char *)name.c_str(), size, (char *)type.c_str());
-				col_count ++;
-			}
-			table_t * cur_tab = (table_t *) _mm_malloc(sizeof(table_t), CL_SIZE);
-			cur_tab->init(schema);
-			tables[tname] = cur_tab;
+                std::string tname;
+                tname = &line[6];
+                schema = (Catalog*)mem_allocator.alloc(sizeof(Catalog), -1);
+                getline(fin, line);
+                int col_count = 0;
+                // Read all fields for this table.
+                vector<string> lines;
+                while (line.length() > 1) {
+                    lines.push_back(line);
+                    getline(fin, line);
+                }
+                schema->init(tname.c_str(), lines.size());
+                for (UInt32 i = 0; i < lines.size(); i++) {
+                    string line = lines[i];
+                    size_t pos = 0;
+                    string token;
+                    int elem_num = 0;
+                    int size = 0;
+                    string type;
+                    string name;
+                    int cf = 0;
+                    while (line.length() != 0) {
+                        pos = line.find(",");
+                        if (pos == string::npos) pos = line.length();
+                        token = line.substr(0, pos);
+                        line.erase(0, pos + 1);
+                        switch (elem_num) {
+                            case 0:
+                                size = atoi(token.c_str());
+                                break;
+                            case 1:
+                                type = token;
+                                break;
+                            case 2:
+                                name = token;
+                                break;
+                            case 3:
+#if TPCC_CF
+                                cf = atoi(token.c_str());
+#endif
+                                break;
+                            default:
+                                assert(false);
+                        }
+                        elem_num++;
+                    }
+                    assert(elem_num == 3 || elem_num == 4);
+                    schema->add_col((char*)name.c_str(), size, (char*)type.c_str());
+                    col_count++;
+                }
+
+                int part_cnt = (CENTRAL_INDEX) ? 1 : g_part_cnt;
+#if WORKLOAD == TPCC
+                if (tname == "ITEM") part_cnt = 1;
+#endif
+
+#if WORKLOAD == YCSB
+                assert(schema->get_tuple_size() == MAX_TUPLE_SIZE);
+#endif
+
+                table_t* cur_tab = (table_t*)mem_allocator.alloc(sizeof(table_t), -1);
+                new (cur_tab) table_t;
+                cur_tab->init(schema);
+                tables[tname] = cur_tab;
         } else if (!line.compare(0, 6, "INDEX=")) {
 			string iname;
 			iname = &line[6];
@@ -86,12 +109,6 @@ RC workload::init_schema(string schema_file) {
 			if (tname == "ITEM")
 				part_cnt = 1;
 
-#if ENGINE_TYPE == PTR0
-//            INDEX * index = index_btree_store::GetInstance();
-            INDEX * index = (INDEX *) _mm_malloc(sizeof(INDEX), 64);
-            new(index) INDEX();
-            index->init_btree_store(sizeof(idx_key_t), tables[tname]);
-#elif ENGINE_TYPE == PTR1 || ENGINE_TYPE == PTR2
     #if INDEX_STRUCT == IDX_HASH
             INDEX * index = (INDEX *) _mm_malloc(sizeof(INDEX), 64);
             new(index) INDEX();
@@ -102,12 +119,15 @@ RC workload::init_schema(string schema_file) {
                 index->init(part_cnt, tables[tname], stoi( items[1] ) * part_cnt);
         #endif
     #elif INDEX_STRUCT == IDX_BTREE
-                INDEX * index = (INDEX *) _mm_malloc(sizeof(INDEX), 64);
-                new(index) INDEX();
-//                index->init(part_cnt, tables[tname]);
-                index->init_btree_store(sizeof(idx_key_t), tables[tname]);
+            INDEX * index = (INDEX *) _mm_malloc(sizeof(INDEX), 64);
+            new(index) INDEX();
+            string str_tbl_name = tname;
+            uint32_t sa = tables.size();
+            auto t = tables.at(tname);
+            auto table = tables[str_tbl_name];
+            index->init_btree_store(sizeof(idx_key_t), table);
     #endif
-#endif
+
 			indexes[iname] = index;
 		}
     }
@@ -123,7 +143,7 @@ void workload::index_insert(string index_name, uint64_t key, row_t * row) {
 	index_insert(index, key, row);
 }
 
-void workload::index_insert(INDEX * index, uint64_t key, row_t * row, int64_t part_id) {
+void workload::index_insert(INDEX * index, uint64_t key, row_t * row, int64_t part_id, uint64_t row_id) {
     RC rc;
 	uint64_t pid = part_id;
 	if (part_id == -1)
@@ -140,10 +160,13 @@ void workload::index_insert(INDEX * index, uint64_t key, row_t * row, int64_t pa
 #if ENGINE_TYPE == PTR1
     rc = index->index_insert(key, row, pid);
 #elif ENGINE_TYPE == PTR2
-    rc = index->index_insert(key, m_item, pid);
+    void *row_item;
+    uint64_t new_row_addr = reinterpret_cast<uint64_t>(m_item);
+    char *data = reinterpret_cast<char *>(&new_row_addr);
+    rc = index->index_insert(key, row_item, data, row_id);
 #elif ENGINE_TYPE == PTR0
     void *row_item;
-    rc = index->index_insert(key, row_item, row->data );
+    rc = index->index_insert(key, row_item, row->data, row_id);
     new_row = reinterpret_cast<row_t *>(row_item);
 #endif
 
